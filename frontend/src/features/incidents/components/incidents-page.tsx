@@ -167,7 +167,7 @@ function IncidentTable({ items }: { items: IncidentSummary[] }) {
             <TableCell>
               <IncidentTypeLabel type={incident.type} />
             </TableCell>
-            <TableCell>{incident.municipality}</TableCell>
+            <TableCell>{incident.location.municipality}</TableCell>
             <TableCell className="font-data text-muted-foreground">
               <time dateTime={incident.reported_at}>{formatDateTime(incident.reported_at)}</time>
             </TableCell>

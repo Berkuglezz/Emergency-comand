@@ -28,6 +28,7 @@ from app.schemas.incidents import (
     IncidentNoteCreate,
     IncidentStatusChange,
     IncidentUpdate,
+    LocationInput,
 )
 from app.services.incidents import IncidentService
 
@@ -71,7 +72,11 @@ async def committed() -> AsyncIterator[Committed]:
     try:
         async with maker() as session:
             view = await IncidentService(session).create_incident(
-                IncidentCreate(type_id=type_id, title=f"tx {tag}", municipality="Oviedo"),
+                IncidentCreate(
+                    type_id=type_id,
+                    title=f"tx {tag}",
+                    location=LocationInput(municipality="Oviedo"),
+                ),
                 await _actor(user_id, session),
             )
         yield Committed(user_id, view.incident.id, type_id, tag)
@@ -247,7 +252,11 @@ async def test_failed_event_rolls_back_the_creation(committed: Committed) -> Non
     async with maker() as session:
         with pytest.raises(IntegrityError):
             await IncidentService(session).create_incident(
-                IncidentCreate(type_id=committed.type_id, title=title, municipality="Gijón"),
+                IncidentCreate(
+                    type_id=committed.type_id,
+                    title=title,
+                    location=LocationInput(municipality="Gijón"),
+                ),
                 await _actor(committed.user_id, session),
             )
 

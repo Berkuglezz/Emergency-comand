@@ -63,8 +63,8 @@ export function formValuesFromIncident(incident: IncidentDetail): IncidentFormVa
     type_id: incident.type.id,
     title: incident.title,
     priority: incident.priority,
-    municipality: incident.municipality,
-    location_description: incident.location_description ?? "",
+    municipality: incident.location.municipality,
+    location_description: incident.location.description ?? "",
     affected_people: incident.affected_people === null ? "" : String(incident.affected_people),
     description: incident.description ?? "",
     parent_incident_id: incident.parent?.id ?? "",
@@ -171,8 +171,10 @@ export function toCreatePayload(
     type_id: values.type_id,
     title: values.title.trim(),
     priority: values.priority || null,
-    municipality: values.municipality.trim(),
-    location_description: optionalText(values.location_description),
+    location: {
+      municipality: values.municipality.trim(),
+      description: optionalText(values.location_description),
+    },
     affected_people: optionalNumber(values.affected_people),
     description: optionalText(values.description),
     details: buildDetails(schemaKey, values.details),
@@ -194,10 +196,13 @@ export function toUpdatePayload(
 
   if (next.title !== incident.title) changes.title = next.title
   if (next.priority && next.priority !== incident.priority) changes.priority = next.priority
-  if (next.municipality !== incident.municipality) changes.municipality = next.municipality
+  // La ubicación se envía completa: sustituye a la anterior.
+  if (
+    next.location.municipality !== incident.location.municipality ||
+    (next.location.description ?? null) !== incident.location.description
+  )
+    changes.location = next.location
   // Vaciar un texto opcional se envía como "" (el backend lo guarda como nulo).
-  if (next.location_description !== incident.location_description)
-    changes.location_description = next.location_description ?? ""
   if (next.description !== incident.description) changes.description = next.description ?? ""
   if (next.affected_people !== incident.affected_people)
     changes.affected_people = next.affected_people

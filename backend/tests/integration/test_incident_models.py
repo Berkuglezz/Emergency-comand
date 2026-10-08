@@ -19,6 +19,7 @@ from app.models import (
     Incident,
     IncidentEvent,
     IncidentType,
+    Location,
     Organization,
     Resource,
     ResourceType,
@@ -38,7 +39,7 @@ async def _new_incident(session: AsyncSession, **overrides: object) -> Incident:
         "title": "Incidente de prueba",
         "status": IncidentStatus.RECEIVED,
         "priority": IncidentPriority.MEDIUM,
-        "municipality": "Oviedo",
+        "location": Location(municipality="Oviedo"),
         **overrides,
     }
     incident = Incident(**values)

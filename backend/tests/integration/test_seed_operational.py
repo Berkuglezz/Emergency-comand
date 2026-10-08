@@ -17,7 +17,7 @@ from app.domain.incident_rules import TERMINAL_STATUSES, reachable_statuses
 from app.models import Incident, IncidentEvent, Organization, Resource, ResourceType
 from app.services.dashboard import DashboardService
 from seeds.fixtures import INCIDENTS, RESOURCES
-from seeds.operational import incident_id, resource_id
+from seeds.operational import incident_id, incident_location_id, resource_id
 from seeds.seed import seed
 
 DEMO_PASSWORD = "demo-password-for-tests"
@@ -60,7 +60,10 @@ async def test_resources_are_created_and_marked_as_simulated(session: AsyncSessi
 async def test_incidents_are_created_and_marked_as_simulated(session: AsyncSession) -> None:
     await seed(session, DEMO_PASSWORD)
 
-    incidents = {i.id: i for i in await session.scalars(select(Incident))}
+    incidents = {
+        i.id: i
+        for i in await session.scalars(select(Incident).options(joinedload(Incident.location)))
+    }
     assert len(incidents) == len(INCIDENTS)
     codes = []
     for fixture in INCIDENTS:
@@ -69,7 +72,9 @@ async def test_incidents_are_created_and_marked_as_simulated(session: AsyncSessi
         assert incident.is_simulated
         assert incident.created_by_id is None
         assert "(simulado)" in incident.title
-        assert incident.location_description and "simulada" in incident.location_description
+        assert incident.location_id == incident_location_id(fixture.key)
+        assert incident.location.municipality == fixture.municipality
+        assert incident.location.description and "simulada" in incident.location.description
         assert incident.status == fixture.status
         assert incident.priority == fixture.priority
         assert (incident.closed_at is not None) == (incident.status in TERMINAL_STATUSES)

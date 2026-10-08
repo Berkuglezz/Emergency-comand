@@ -21,7 +21,7 @@ async def _incident(
     type_id = (
         await session.scalars(select(IncidentType.id).where(IncidentType.code == "flood"))
     ).one()
-    body = {"type_id": str(type_id), "title": "x", "municipality": "Oviedo", **fields}
+    body = {"type_id": str(type_id), "title": "x", "location": {"municipality": "Oviedo"}, **fields}
     response = await client.post(f"{API}/incidents", json=body, headers=headers)
     assert response.status_code == 201, response.text
     data: dict[str, Any] = response.json()

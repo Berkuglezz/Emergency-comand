@@ -35,7 +35,7 @@ async def _create(
     body = {
         "type_id": await _type_id(session, type_code),
         "title": "Incidente de prueba",
-        "municipality": "Oviedo",
+        "location": {"municipality": "Oviedo"},
         **fields,
     }
     response = await client.post(f"{API}/incidents", json=body, headers=headers)
@@ -79,7 +79,11 @@ async def test_operator_can_read_but_never_write(
 
     type_id = await _type_id(session, "flood")
     writes = [
-        ("POST", f"{API}/incidents", {"type_id": type_id, "title": "x", "municipality": "Gijón"}),
+        (
+            "POST",
+            f"{API}/incidents",
+            {"type_id": type_id, "title": "x", "location": {"municipality": "Gijón"}},
+        ),
         ("PATCH", path, {"version": 1, "title": "cambio"}),
         ("POST", f"{path}/status", {"status": "assessing", "version": 1}),
         ("POST", f"{path}/status", {"status": "cancelled", "version": 1}),
@@ -122,7 +126,7 @@ async def test_create_incident(
         type_code="flood",
         details={"water_level_cm": 35},
         affected_people=4,
-        location_description="Zona baja (ubicación simulada)",
+        location={"municipality": "Gijón", "description": "Zona baja (ubicación simulada)"},
     )
 
     assert incident["code"].startswith("INC-")
@@ -133,6 +137,11 @@ async def test_create_incident(
     assert incident["version"] == 1
     assert incident["is_simulated"] is False
     assert incident["closed_at"] is None
+    assert incident["location"] == {
+        "municipality": "Gijón",
+        "description": "Zona baja (ubicación simulada)",
+    }
+    assert "municipality" not in incident
 
     events = await _events(client, headers[RoleCode.COORDINATOR], incident["id"])
     assert [event["event_type"] for event in events] == ["incident_created"]
@@ -171,7 +180,7 @@ async def test_details_are_validated_per_type(
     body = {
         "type_id": await _type_id(session, type_code),
         "title": "x",
-        "municipality": "Oviedo",
+        "location": {"municipality": "Oviedo"},
         **fields,
     }
     response = await client.post(f"{API}/incidents", json=body, headers=headers[RoleCode.ADMIN])
@@ -182,7 +191,7 @@ async def test_details_are_validated_per_type(
 async def test_unknown_incident_type_is_rejected(
     client: AsyncClient, headers: dict[RoleCode, Headers]
 ) -> None:
-    body = {"type_id": str(uuid.uuid4()), "title": "x", "municipality": "Oviedo"}
+    body = {"type_id": str(uuid.uuid4()), "title": "x", "location": {"municipality": "Oviedo"}}
     response = await client.post(f"{API}/incidents", json=body, headers=headers[RoleCode.ADMIN])
     assert response.json() == {"detail": "incident_type_not_found"}
 
@@ -337,6 +346,7 @@ async def test_update_without_changes_records_nothing(
 
     for body in (
         {"version": 1, "title": incident["title"], "priority": incident["priority"]},
+        {"version": 1, "location": {"municipality": "Oviedo", "description": ""}},
         {"version": 1},
     ):
         response = await client.patch(f"{API}/incidents/{incident['id']}", json=body, headers=admin)
@@ -347,9 +357,50 @@ async def test_update_without_changes_records_nothing(
     assert len(await _events(client, admin, incident["id"])) == 1
 
 
+async def test_location_change_bumps_version_once(
+    client: AsyncClient, session: AsyncSession, headers: dict[RoleCode, Headers]
+) -> None:
+    admin = headers[RoleCode.ADMIN]
+    incident = await _create(client, session, admin)
+    path = f"{API}/incidents/{incident['id']}"
+
+    # Solo cambia la ubicación (otra tabla): la versión del incidente sube igual.
+    response = await client.patch(
+        path,
+        json={"version": 1, "location": {"municipality": "Gijón", "description": "Puerto"}},
+        headers=admin,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["version"] == 2
+    assert body["location"] == {"municipality": "Gijón", "description": "Puerto"}
+    assert body["updated_at"] > incident["updated_at"]
+    events = await _events(client, admin, incident["id"])
+    assert [e["event_type"] for e in events] == ["incident_created", "incident_updated"]
+    assert events[1]["payload"] == {"fields": ["location_description", "municipality"]}
+
+    # La ubicación se sustituye completa: sin descripción, queda vacía.
+    response = await client.patch(
+        path, json={"version": 2, "location": {"municipality": "Gijón"}}, headers=admin
+    )
+    assert response.json()["location"] == {"municipality": "Gijón", "description": None}
+    assert response.json()["version"] == 3
+
+    # Un cambio de ubicación con una versión obsoleta no se aplica.
+    response = await client.patch(
+        path, json={"version": 2, "location": {"municipality": "Avilés"}}, headers=admin
+    )
+    assert response.status_code == 409
+    assert (await client.get(path, headers=admin)).json()["location"]["municipality"] == "Gijón"
+
+
 @pytest.mark.parametrize(
     ("body", "code"),
-    [({"title": None}, "field_not_nullable"), ({"details": None}, "field_not_nullable")],
+    [
+        ({"title": None}, "field_not_nullable"),
+        ({"details": None}, "field_not_nullable"),
+        ({"location": None}, "field_not_nullable"),
+    ],
 )
 async def test_required_fields_cannot_be_cleared(
     client: AsyncClient,
@@ -404,7 +455,7 @@ async def test_parent_and_children(
     body = {
         "type_id": await _type_id(session, "flood"),
         "title": "Nieto",
-        "municipality": "Avilés",
+        "location": {"municipality": "Avilés"},
         "parent_incident_id": child["id"],
     }
     response = await client.post(f"{API}/incidents", json=body, headers=admin)

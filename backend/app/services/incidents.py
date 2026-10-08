@@ -28,20 +28,21 @@ from app.domain.incident_rules import (
     TERMINAL_STATUSES,
     can_transition,
 )
-from app.models import Incident, IncidentEvent, IncidentType, User
+from app.models import Incident, IncidentEvent, IncidentType, Location, User
 from app.repositories.incidents import IncidentListQuery, IncidentRepository
 from app.schemas.incidents import (
     IncidentCreate,
     IncidentNoteCreate,
     IncidentStatusChange,
     IncidentUpdate,
+    LocationInput,
 )
 from app.services.transactions import commit_or_conflict
 
 # Campos editables sin evento propio (se agrupan en `incident_updated`).
-_PLAIN_FIELDS = ("title", "description", "municipality", "location_description", "affected_people")
+_PLAIN_FIELDS = ("title", "description", "affected_people")
 # Campos que no admiten `null` en una edición parcial.
-_NOT_NULLABLE = frozenset({"title", "municipality", "priority", "details"})
+_NOT_NULLABLE = frozenset({"title", "location", "priority", "details"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +73,20 @@ class _EventRecorder:
         )
         self._repository.add_event(event)
         return event
+
+
+def _apply_location(location: Location, data: LocationInput) -> list[str]:
+    """Sustituye la ubicación completa. Devuelve los campos que cambiaron, con
+    los nombres que ya usa el historial (`municipality`, `location_description`)."""
+    changed: list[str] = []
+    description = data.description or None  # cadena vacía = sin valor
+    if location.municipality != data.municipality:
+        location.municipality = data.municipality
+        changed.append("municipality")
+    if location.description != description:
+        location.description = description
+        changed.append("location_description")
+    return changed
 
 
 class IncidentService:
@@ -117,8 +132,10 @@ class IncidentService:
             description=data.description or None,
             status=INITIAL_STATUS,
             priority=data.priority or incident_type.default_priority,
-            municipality=data.municipality,
-            location_description=data.location_description or None,
+            location=Location(
+                municipality=data.location.municipality,
+                description=data.location.description or None,
+            ),
             affected_people=data.affected_people,
             details=details,
             parent_incident_id=parent.id if parent else None,
@@ -155,7 +172,8 @@ class IncidentService:
         if any(getattr(data, name) is None for name in sent & _NOT_NULLABLE):
             raise InvalidInputError("field_not_nullable")
 
-        events = _EventRecorder(self._incidents, actor, datetime.now(UTC))
+        now = datetime.now(UTC)
+        events = _EventRecorder(self._incidents, actor, now)
 
         # El padre se valida (consulta) antes de modificar nada: así el autoflush
         # no emite un UPDATE intermedio y `version` sube una sola vez.
@@ -188,6 +206,11 @@ class IncidentService:
                 if getattr(incident, name) != value:
                     setattr(incident, name, value)
                     changed.append(name)
+        location_edited = False
+        if "location" in sent and data.location is not None:
+            location_fields = _apply_location(incident.location, data.location)
+            changed.extend(location_fields)
+            location_edited = bool(location_fields)
         if "details" in sent and data.details is not None:
             details = validate_details(incident.type.details_schema_key, data.details)
             if details != incident.details:
@@ -195,6 +218,10 @@ class IncidentService:
                 changed.append("details")
         if changed:
             events.record(incident, IncidentEventType.INCIDENT_UPDATED, {"fields": sorted(changed)})
+        if location_edited:
+            # La ubicación vive en otra tabla: sin tocar la fila del incidente,
+            # `version` no subiría y el bloqueo optimista no cubriría el cambio.
+            incident.updated_at = now
 
         await self._commit()
         return await self.get_incident(incident.id)

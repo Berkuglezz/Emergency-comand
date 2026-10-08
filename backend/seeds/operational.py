@@ -26,7 +26,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.enums import IncidentEventType
 from app.domain.incident_details import validate_details
 from app.domain.incident_rules import INITIAL_STATUS, TERMINAL_STATUSES, can_transition
-from app.models import Incident, IncidentEvent, IncidentType, Organization, Resource, ResourceType
+from app.models import (
+    Incident,
+    IncidentEvent,
+    IncidentType,
+    Location,
+    Organization,
+    Resource,
+    ResourceType,
+)
 from app.repositories.incidents import IncidentRepository
 from seeds.fixtures import INCIDENTS, RESOURCES, DemoIncident
 
@@ -40,6 +48,10 @@ def resource_id(code: str) -> uuid.UUID:
 
 def incident_id(key: str) -> uuid.UUID:
     return uuid.uuid5(SEED_NAMESPACE, f"incident:{key}")
+
+
+def incident_location_id(key: str) -> uuid.UUID:
+    return uuid.uuid5(SEED_NAMESPACE, f"incident:{key}:location")
 
 
 def incident_event_id(key: str, index: int) -> uuid.UUID:
@@ -108,8 +120,13 @@ async def seed_incidents(session: AsyncSession, now: datetime) -> list[str]:
             description=fixture.description,
             status=fixture.status,
             priority=fixture.priority,
-            municipality=fixture.municipality,
-            location_description=fixture.location_description,
+            location=Location(
+                id=incident_location_id(fixture.key),
+                municipality=fixture.municipality,
+                description=fixture.location_description,
+                created_at=reported_at,
+                updated_at=reported_at,
+            ),
             affected_people=fixture.affected_people,
             details=validate_details(incident_type.details_schema_key, fixture.details),
             parent_incident_id=incident_id(fixture.parent_key) if fixture.parent_key else None,

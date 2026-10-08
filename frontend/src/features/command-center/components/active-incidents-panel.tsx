@@ -171,7 +171,7 @@ export function ActiveIncidentsPanel({
                 <TableCell>
                   <IncidentStatusPill status={incident.status} />
                 </TableCell>
-                <TableCell>{incident.municipality}</TableCell>
+                <TableCell>{incident.location.municipality}</TableCell>
                 <TableCell className="font-data text-muted-foreground">
                   <time dateTime={incident.reported_at}>
                     {formatDateTime(incident.reported_at)}

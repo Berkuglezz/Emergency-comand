@@ -100,7 +100,9 @@ function SelectedIncident({
           </div>
 
           <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
-            <DetailItem label={t("incidents.fields.municipality")}>{data.municipality}</DetailItem>
+            <DetailItem label={t("incidents.fields.municipality")}>
+              {data.location.municipality}
+            </DetailItem>
             <DetailItem label={t("incidents.fields.affectedPeople")}>
               {data.affected_people === null ? "—" : formatNumber(data.affected_people)}
             </DetailItem>

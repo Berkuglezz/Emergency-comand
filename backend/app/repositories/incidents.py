@@ -75,12 +75,17 @@ class IncidentRepository:
         statement = (
             select(Incident)
             .where(Incident.id == incident_id)
-            .options(joinedload(Incident.type), joinedload(Incident.parent))
+            .options(
+                joinedload(Incident.type),
+                joinedload(Incident.location),
+                joinedload(Incident.parent),
+            )
             # Relee la fila aunque ya esté en la sesión (p. ej. tras cambiar el padre).
             .execution_options(populate_existing=True)
         )
         if for_update:
-            # Bloquea la fila del incidente durante el cambio (no las del tipo o el padre).
+            # Bloquea la fila del incidente durante el cambio (no las del tipo,
+            # la ubicación o el padre): todo cambio de ubicación pasa por ella.
             statement = statement.with_for_update(of=Incident)
         return (await self._session.scalars(statement)).unique().one_or_none()
 
@@ -100,7 +105,7 @@ class IncidentRepository:
             select(func.count()).select_from(filtered.order_by(None).subquery())
         )
         statement = (
-            filtered.options(joinedload(Incident.type))
+            filtered.options(joinedload(Incident.type), joinedload(Incident.location))
             .order_by(*self._ordering(query.sort))
             .limit(query.limit)
             .offset(query.offset)

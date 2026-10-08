@@ -53,6 +53,23 @@ class IncidentTypeResponse(IncidentTypeSummary):
     is_active: bool
 
 
+# --- Ubicación ----------------------------------------------------------------------
+
+
+class LocationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    municipality: str
+    description: str | None
+
+
+class LocationInput(_Input):
+    """Ubicación completa: en una edición sustituye a la anterior."""
+
+    municipality: Municipality
+    description: LocationDescription | None = None
+
+
 # --- Incidentes ------------------------------------------------------------------
 
 
@@ -77,8 +94,7 @@ class IncidentSummary(BaseModel):
     status: IncidentStatus
     priority: IncidentPriority
     type: IncidentTypeSummary
-    municipality: str
-    location_description: str | None
+    location: LocationResponse
     affected_people: int | None
     parent_incident_id: uuid.UUID | None
     is_simulated: bool
@@ -112,8 +128,7 @@ class IncidentCreate(_Input):
     description: Description | None = None
     # Si no se indica, se usa la prioridad por defecto del tipo.
     priority: IncidentPriority | None = None
-    municipality: Municipality
-    location_description: LocationDescription | None = None
+    location: LocationInput
     affected_people: AffectedPeople | None = None
     details: dict[str, Any] = Field(default_factory=dict)
     parent_incident_id: uuid.UUID | None = None
@@ -127,8 +142,7 @@ class IncidentUpdate(_Input):
     title: Title | None = None
     description: Description | None = None
     priority: IncidentPriority | None = None
-    municipality: Municipality | None = None
-    location_description: LocationDescription | None = None
+    location: LocationInput | None = None
     affected_people: AffectedPeople | None = None
     details: dict[str, Any] | None = None
     parent_incident_id: uuid.UUID | None = None

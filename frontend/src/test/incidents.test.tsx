@@ -278,7 +278,7 @@ describe("alta de incidente", () => {
     const post = backend.calls.find((call) => call.method === "POST" && call.path === "/incidents")
     expect(post?.body).toMatchObject({
       title: "Incendio nuevo",
-      municipality: "Siero",
+      location: { municipality: "Siero", description: null },
       priority: null,
       details: { affected_hectares: "3.5", vegetation: "scrub" },
     })

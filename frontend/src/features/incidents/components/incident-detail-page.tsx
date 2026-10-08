@@ -122,7 +122,7 @@ function IncidentHeader({ incident }: { incident: IncidentDetail }) {
       <h1 className="text-lg font-semibold">{incident.title}</h1>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
         <IncidentTypeLabel type={incident.type} />
-        <span>{incident.municipality}</span>
+        <span>{incident.location.municipality}</span>
       </div>
     </header>
   )
@@ -233,9 +233,11 @@ function Summary({ incident, type }: { incident: IncidentDetail; type: IncidentT
         <DetailItem label={t("incidents.fields.category")}>
           {type ? label("incidentCategories", type.category) : "—"}
         </DetailItem>
-        <DetailItem label={t("incidents.fields.municipality")}>{incident.municipality}</DetailItem>
+        <DetailItem label={t("incidents.fields.municipality")}>
+          {incident.location.municipality}
+        </DetailItem>
         <DetailItem label={t("incidents.fields.locationDescription")}>
-          {incident.location_description ?? "—"}
+          {incident.location.description ?? "—"}
         </DetailItem>
         <DetailItem label={t("incidents.fields.affectedPeople")}>
           {incident.affected_people === null ? "—" : formatNumber(incident.affected_people)}

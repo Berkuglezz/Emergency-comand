@@ -20,8 +20,7 @@ const INCIDENT: IncidentDetail = {
   status: "in_progress",
   priority: "high",
   type: { id: "t-1", code: "wildfire", category: "fire", icon: "Flame" },
-  municipality: "Siero",
-  location_description: "Zona forestal (ubicación simulada)",
+  location: { municipality: "Siero", description: "Zona forestal (ubicación simulada)" },
   affected_people: null,
   parent_incident_id: null,
   is_simulated: true,
@@ -61,8 +60,7 @@ describe("alta", () => {
       type_id: "t-2",
       title: "Colisión",
       priority: null,
-      municipality: "Gijón",
-      location_description: null,
+      location: { municipality: "Gijón", description: null },
       affected_people: null,
       description: null,
       details: {},
@@ -86,8 +84,25 @@ describe("edición", () => {
   })
 
   it("vaciar un texto opcional se envía como cadena vacía", () => {
-    const payload = toUpdatePayload(values({ location_description: "" }), INCIDENT, "wildfire")
-    expect(payload).toEqual({ location_description: "", version: 4 })
+    const payload = toUpdatePayload(values({ description: "Notas" }), INCIDENT, "wildfire")
+    expect(payload).toEqual({ description: "Notas", version: 4 })
+    const cleared = toUpdatePayload(
+      values({ description: "" }),
+      { ...INCIDENT, description: "Notas" },
+      "wildfire"
+    )
+    expect(cleared).toEqual({ description: "", version: 4 })
+  })
+
+  it("la ubicación se envía completa si cambia cualquiera de sus campos", () => {
+    expect(toUpdatePayload(values({ location_description: "" }), INCIDENT, "wildfire")).toEqual({
+      location: { municipality: "Siero", description: null },
+      version: 4,
+    })
+    expect(toUpdatePayload(values({ municipality: "Gijón" }), INCIDENT, "wildfire")).toEqual({
+      location: { municipality: "Gijón", description: "Zona forestal (ubicación simulada)" },
+      version: 4,
+    })
   })
 
   it("detecta cambios en details sin depender del orden de las claves", () => {

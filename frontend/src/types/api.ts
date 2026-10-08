@@ -388,10 +388,7 @@ export interface components {
             /** Description */
             description?: string | null;
             priority?: components["schemas"]["IncidentPriority"] | null;
-            /** Municipality */
-            municipality: string;
-            /** Location Description */
-            location_description?: string | null;
+            location: components["schemas"]["LocationInput"];
             /** Affected People */
             affected_people?: number | null;
             /** Details */
@@ -415,10 +412,7 @@ export interface components {
             status: components["schemas"]["IncidentStatus"];
             priority: components["schemas"]["IncidentPriority"];
             type: components["schemas"]["IncidentTypeSummary"];
-            /** Municipality */
-            municipality: string;
-            /** Location Description */
-            location_description: string | null;
+            location: components["schemas"]["LocationResponse"];
             /** Affected People */
             affected_people: number | null;
             /** Parent Incident Id */
@@ -565,10 +559,7 @@ export interface components {
             status: components["schemas"]["IncidentStatus"];
             priority: components["schemas"]["IncidentPriority"];
             type: components["schemas"]["IncidentTypeSummary"];
-            /** Municipality */
-            municipality: string;
-            /** Location Description */
-            location_description: string | null;
+            location: components["schemas"]["LocationResponse"];
             /** Affected People */
             affected_people: number | null;
             /** Parent Incident Id */
@@ -636,10 +627,7 @@ export interface components {
             /** Description */
             description?: string | null;
             priority?: components["schemas"]["IncidentPriority"] | null;
-            /** Municipality */
-            municipality?: string | null;
-            /** Location Description */
-            location_description?: string | null;
+            location?: components["schemas"]["LocationInput"] | null;
             /** Affected People */
             affected_people?: number | null;
             /** Details */
@@ -648,6 +636,23 @@ export interface components {
             } | null;
             /** Parent Incident Id */
             parent_incident_id?: string | null;
+        };
+        /**
+         * LocationInput
+         * @description Ubicación completa: en una edición sustituye a la anterior.
+         */
+        LocationInput: {
+            /** Municipality */
+            municipality: string;
+            /** Description */
+            description?: string | null;
+        };
+        /** LocationResponse */
+        LocationResponse: {
+            /** Municipality */
+            municipality: string;
+            /** Description */
+            description: string | null;
         };
         /** LoginRequest */
         LoginRequest: {

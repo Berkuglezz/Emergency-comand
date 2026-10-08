@@ -20,7 +20,7 @@ Emergency Command es un **prototipo demostrable** de plataforma de coordinación
 |---|---|
 | Fase 1: base técnica | **Completada** (ver §2.1 y §11.1) |
 | Fase 2: incidentes, recursos y dashboard funcional | **Completada** (ver §2.3 y §11.2) |
-| Fase 3: geolocalización (PostGIS + `Location`) y mapa funcional | **Dirección acordada, alcance pendiente.** No se implementa nada hasta que se apruebe la propuesta técnica; entonces se añadirá aquí su alcance |
+| Fase 3: geolocalización (PostGIS + `Location`) y mapa funcional | **En curso** (alcance aprobado en §2.6; fuera de alcance en §2.7) |
 
 Trabaja **solo** en el alcance de la fase autorizada. Todo lo demás está fuera de alcance aunque parezca útil o rápido de añadir.
 
@@ -132,6 +132,51 @@ Si una tarea de Fase 2 parece requerir algo de esta lista, **pregunta antes**.
   - Iconos del catálogo de tipos importados uno a uno desde Lucide; un icono nuevo muestra uno genérico hasta añadirlo.
   - Filtros de un solo valor en la interfaz para estado y prioridad (la API ya admite varios).
   - Prueba de extremo a extremo manual, fuera del repositorio.
+
+### 2.6 Fase 3: geolocalización y mapa funcional (en curso)
+
+Propuesta técnica aprobada el 2026-10-08. Se implementa por etapas, y cada una se verifica, se resume y espera aprobación:
+
+| Etapa | Contenido |
+|---|---|
+| 3.1 Datos y modelo | `geoalchemy2`, `Location`, migración con traslado de datos, índice GiST, `location` anidada **solo textual**. Sin coordenadas en la API ni UX de ubicación |
+| 3.2 API de ubicación | Coordenadas en la API, validación, `location_changed`, filtro `has_coordinates`, `GET /incidents/map` |
+| 3.3 Seed | Coordenadas simuladas, incidentes sin coordenadas a propósito; reinicio de la BD de desarrollo |
+| 3.4 Mapa base | MapLibre + OpenFreeMap `dark`, atribución, encuadre de Asturias, fallback sin teselas, nueva disposición |
+| 3.5 Marcadores e interacción | Marcadores, leyenda, mapa ↔ lista ↔ panel por URL, filtros compartidos |
+| 3.6 Formularios y ficha | Coordenadas en alta/edición, «Elegir en el mapa», minimapa en la ficha, timeline de `location_changed` |
+| 3.7 Documentación y cierre | README, `docs/architecture.md`, accesibilidad, clon limpio, resumen §12 |
+
+**Modelo**
+- `Location` 1:1 con `Incident` (`incidents.location_id` `NOT NULL UNIQUE` → `locations.id`). Solo la usa `Incident`: nada de `Place`, repositorios genéricos ni abstracciones para otras entidades.
+- `locations`: `municipality` (obligatorio), `description`, `geom geometry(Point, 4326)` nullable (NULL = sin coordenadas), índice GiST.
+- Latitud/longitud no se guardan en columnas propias: se leen de `geom`. Recursos siguen con `municipality` textual.
+- `geoalchemy2` solo para integrar `Geometry` con SQLAlchemy/Alembic; sin Shapely.
+
+**API**
+- `location` anidada (`LocationInput` / `LocationResponse`) sustituye a `municipality` y `location_description`, sin capa de compatibilidad. En edición, `location` se envía completa.
+- Coordenadas WGS84 en grados decimales: rangos, ambas o ninguna, sin `NaN`/infinitos, 6 decimales. Fuera del rectángulo de Asturias → 422 `location_out_of_area` (protección de la demo, no geofencing).
+- Cambiar la ubicación incrementa `version` una vez y registra `location_changed` con el antes y el después.
+- `GET /api/v1/incidents/map`: `FeatureCollection` GeoJSON con datos mínimos, filtros de estado/prioridad, `bbox` opcional, `unlocated_total`, tope de 1.000 con `truncated`. **No sustituye a `GET /incidents`**, que sigue alimentando la lista.
+
+**Frontend**
+- `maplibre-gl` directo (sin `react-map-gl`), carga diferida, estilo OpenFreeMap `dark` configurable con `VITE_MAP_STYLE_URL`, atribución siempre visible, fallback sin mapa base.
+- El mapa ocupa ~55 % de la zona principal del centro de mando; la lista va debajo.
+- Marcadores DOM accesibles: color + icono + código por prioridad; borde por estado; simulado siempre indicado. Sin popup en el centro de mando (el detalle está en el panel lateral).
+- Selección y filtros en la URL, compartidos por mapa, lista y panel. Incidentes sin coordenadas: aviso con recuento y filtro, nunca ocultos.
+
+**Datos y seguridad**
+- Seed: coordenadas redondeadas a 3 decimales en zonas públicas genéricas, nunca sobre instalaciones reales de emergencias; se mantiene la regla «crea lo que falta, no pisa lo existente» y se reinicia la BD de desarrollo.
+- Las coordenadas pueden estar en `IncidentEvent.payload` (historial protegido por `incidents:read`), pero **nunca en logs de aplicación, mensajes de excepción ni trazas**.
+- Al proveedor de teselas solo se le piden teselas: nunca se le envían coordenadas ni datos de incidentes. Sin geocodificación.
+
+**Dependencias aprobadas:** `geoalchemy2` 0.20.0 y `maplibre-gl` 6.13.0.
+
+### 2.7 Fuera de alcance en Fase 3 (no implementar)
+
+GPS de recursos, recursos en el mapa, asignaciones, rutas, ETA, OSRM, distancias, geocodificación, geofencing, zonas de cobertura, clustering, consultas espaciales distintas del filtro por rectángulo, WebSockets, polling, Redis, IA/Ollama, hospitales, simulador, estadísticas avanzadas, PMTiles/offline e integraciones reales con servicios de emergencia.
+
+Si una tarea de Fase 3 parece requerir algo de esta lista, **pregunta antes**.
 
 ---
 

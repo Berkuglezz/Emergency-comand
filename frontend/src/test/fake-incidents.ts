@@ -80,7 +80,7 @@ export class FakeIncidents {
         type_id: type.id,
         title: seed.title,
         priority: seed.priority ?? type.default_priority,
-        municipality: "Oviedo",
+        location: { municipality: "Oviedo" },
         parent_incident_id: parent?.id ?? null,
       },
       null,
@@ -179,11 +179,20 @@ export class FakeIncidents {
     if (route === "PATCH /incidents/:id") {
       if (TERMINAL.includes(incident.status)) return error(422, "incident_closed")
       const changed: string[] = []
-      for (const field of ["title", "municipality", "description", "affected_people"] as const) {
+      for (const field of ["title", "description", "affected_people"] as const) {
         if (field in input && input[field] !== incident[field]) {
           Object.assign(incident, { [field]: input[field] })
           changed.push(field)
         }
+      }
+      // Como el backend: la ubicación se sustituye completa y sus cambios se
+      // registran con los nombres de campo de siempre.
+      if (input.location) {
+        const location = input.location as Schemas["LocationInput"]
+        const description = location.description === "" ? null : (location.description ?? null)
+        if (location.municipality !== incident.location.municipality) changed.push("municipality")
+        if (description !== incident.location.description) changed.push("location_description")
+        incident.location = { municipality: location.municipality, description }
       }
       if (typeof input.priority === "string" && input.priority !== incident.priority) {
         this.record(incident, user, "priority_changed", {
@@ -209,7 +218,7 @@ export class FakeIncidents {
   private insert(
     data: Pick<
       Schemas["IncidentCreate"],
-      "type_id" | "title" | "priority" | "municipality" | "parent_incident_id"
+      "type_id" | "title" | "priority" | "location" | "parent_incident_id"
     > &
       Partial<Schemas["IncidentCreate"]>,
     user: Me | null,
@@ -226,8 +235,10 @@ export class FakeIncidents {
       status: "received",
       priority: data.priority ?? type.default_priority,
       type: { id: type.id, code: type.code, category: type.category, icon: type.icon },
-      municipality: data.municipality,
-      location_description: data.location_description ?? null,
+      location: {
+        municipality: data.location.municipality,
+        description: data.location.description ?? null,
+      },
       affected_people: data.affected_people ?? null,
       parent_incident_id: data.parent_incident_id ?? null,
       is_simulated: isSimulated,
