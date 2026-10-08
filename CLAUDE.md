@@ -21,6 +21,7 @@ Emergency Command es un **prototipo demostrable** de plataforma de coordinación
 | Fase 1: base técnica | **Completada** (ver §2.1 y §11.1) |
 | Fase 2: incidentes, recursos y dashboard funcional | **Completada** (ver §2.3 y §11.2) |
 | Fase 3: geolocalización (PostGIS + `Location`) y mapa funcional | **Completada** (ver §2.6 y §11.3) |
+| Fase 4: asignación de recursos y ETA | **Especificada, pendiente de iniciar** (alcance en §2.8; fuera de alcance en §2.9; criterios en §11.4). La 4.1 empieza solo con indicación expresa |
 
 Trabaja **solo** en el alcance de la fase autorizada. Todo lo demás está fuera de alcance aunque parezca útil o rápido de añadir.
 
@@ -178,6 +179,81 @@ GPS de recursos, recursos en el mapa, asignaciones, rutas, ETA, OSRM, distancias
 
 Si una tarea de Fase 3 parece requerir algo de esta lista, **pregunta antes**.
 
+### 2.8 Fase 4: asignación de recursos y ETA (especificada)
+
+Especificación aprobada el 2026-10-08. **Principio rector: el sistema informa → la persona responsable decide → el sistema ejecuta.** El sistema ordena candidatos y marca tipos sugeridos, pero nunca preselecciona ni asigna automáticamente (eso no es IA ni recomendación automática; la IA es Fase 8).
+
+Se implementa por etapas; cada una se verifica, se resume y espera aprobación:
+
+| Etapa | Contenido |
+|---|---|
+| 4.1 Bases y velocidades | Base del recurso como `Location` 1:1, `resource_types.average_speed_kmh`, migraciones de datos, bases con coordenadas en el seed. Sin asignaciones |
+| 4.2 Dominio | Cálculo de ETA (`domain/eta.py`), reglas de asignación y transiciones nuevas, todo puro y testeado |
+| 4.3 Asignaciones en backend | `ResourceAssignment`, migraciones, servicio, `IncidentEvent` nuevos, API y permisos |
+| 4.4 Frontend de recursos | Base en ficha y formulario, asignación actual, cambio de estado bloqueado si está asignado |
+| 4.5 Frontend del incidente | Panel de asignados, diálogo «Asignar recurso», llegada, retirada, reasignación, cierre con recursos y timeline |
+| 4.6 Mapa | Bases de los recursos asignados al incidente seleccionado |
+| 4.7 Cierre | Seed de asignaciones, documentación, clon limpio y resumen §12 |
+
+**Posición del recurso**
+- En la Fase 4 solo existe la **base** del recurso (dónde está destinado). La posición actual/GPS es Fase 5.
+- La base reutiliza `Location` 1:1: `resources.base_location_id NOT NULL UNIQUE` → `locations.id`. Se revisa la decisión de la Fase 3 de no generalizar `Location` porque ahora hay un segundo consumidor real con las mismas necesidades (coordenadas, validación, área de Asturias, selector en el mapa, API). Las filas nunca se comparten entre recursos ni con incidentes. `resources.municipality` se traslada a la base y desaparece.
+- Diseño previsto para la Fase 5 (no se implementa ahora): `resource_positions` de solo inserción (`resource_id`, `geom` Point 4326, `recorded_at`, `source` manual|simulated|gps, `is_simulated`). La ETA lleva `origin` (`"base"` en la Fase 4; `"last_position"` en la Fase 5) para no cambiar el contrato.
+
+**ETA**
+- Cálculo local y determinista en el dominio, sin APIs externas ni rutas por carretera: `minutos = ceil(haversine_km × 1.4 / velocidad_media_del_tipo × 60)`.
+- Factor de sinuosidad global 1.4. Velocidades medias por tipo (km/h) en el catálogo: autobomba 50, vehículo de rescate 55, ambulancia básica 60, ambulancia avanzada 65, vehículo de mando 60, unidad de protección civil 50, apoyo logístico 45. Sin tiempo de activación.
+- Resultado: `{minutes, distance_km (1 decimal), origin: "base"}`, o `null` con motivo (`incident_without_coordinates`, `resource_without_position`).
+- **La estimación se guarda en la asignación en el momento de asignar** (`eta_minutes`, `eta_distance_km`, `eta_origin`): cambiar después una base o una velocidad nunca altera el historial.
+- Siempre se presenta como «estimado» (p. ej. «≈ 12 min · 8,4 km (estimado)», «llegada estimada hh:mm»), con icono y texto; nunca como hora exacta.
+
+**`ResourceAssignment`**
+- Tabla `resource_assignments`: `incident_id`, `resource_id`, `assigned_at`, `assigned_by_id`, `arrived_at`, `released_at`, `released_by_id`, `release_reason`, `eta_minutes`, `eta_distance_km`, `eta_origin`, `is_simulated`, `created_at`, `updated_at`. Activa = `released_at IS NULL`. Nunca se borra.
+- Índice único parcial `(resource_id) WHERE released_at IS NULL`: **un recurso solo puede tener una asignación activa**. Un incidente puede tener **varios recursos**.
+- **Asignar:** incidente activo (con su `version`), recurso activo y `available`. Efectos en una transacción: recurso → `in_service`, asignación con ETA, evento `resource_assigned`, y el incidente pasa a `resources_assigned` si estaba en `received` o `assessing`. Bloqueo `FOR UPDATE` en orden incidente → recurso.
+- **«En el lugar»:** rellena `arrived_at` una sola vez y registra `resource_arrived`. **No cambia el estado del incidente.**
+- **Retirar:** motivo obligatorio: `completed`, `not_needed`, `unavailable` (el usuario elige); `reassigned` e `incident_closed` (los pone el sistema). El recurso vuelve a `available`, o a `out_of_service` con `unavailable`. Si era el último activo y el incidente seguía en `resources_assigned`, este vuelve a `assessing`; en `in_progress` o `controlled` no cambia.
+- **Reasignar:** explícita (`reassign: true`), confirmada en el frontend y atómica: retira en el incidente de origen (`reassigned`) y asigna en el de destino, con eventos y reglas aplicadas en ambos.
+- **Cerrar o cancelar un incidente** retira automáticamente sus asignaciones activas (`incident_closed`); la confirmación de la interfaz enumera los recursos afectados.
+- **Cambio manual de estado de un recurso asignado:** bloqueado (`resource_assigned`). Se retira desde el incidente.
+
+**Estados del incidente**
+- `resources_assigned` pasa a ser alcanzable, **solo automáticamente**: `received`/`assessing` → `resources_assigned` (primera asignación); `resources_assigned` → `assessing` (se retira la última). Manuales desde `resources_assigned`: `in_progress` y `cancelled` (con `incidents:close`). No aparece como acción manual en `allowed_transitions`.
+- Los cambios automáticos se registran como `status_changed` con `cause: "assignment"`.
+
+**Historial (`IncidentEvent`)**
+- Nuevos: `resource_assigned` (`resource`, `resource_id`, `resource_type`, `eta`, `reassigned_from`), `resource_arrived` (`resource`, `resource_id`), `resource_released` (`resource`, `resource_id`, `reason`, `reassigned_to`). Siempre en la misma transacción que el cambio. Sin coordenadas de bases en el historial.
+
+**API**
+- `GET /incidents/{id}/assignments` (`incidents:read`): activas e historial, con la base de cada recurso.
+- `GET /incidents/{id}/assignment-candidates` (`incidents:read` + `resources:read`): recursos activos con ETA, ordenados por ETA (sin base, al final), con los tipos sugeridos por el catálogo marcados; filtros `type`, `organization_id`, `include_assigned`. **Sin preselección.**
+- `POST /incidents/{id}/assignments` (`assignments:manage`): `{resource_id, version, reassign?}`.
+- `POST /assignments/{id}/arrival` (`assignments:update`) y `POST /assignments/{id}/release` (`assignments:manage`, `{reason, version}`), ambos con la `version` del incidente.
+- Recursos: `base` (`LocationInput`/`LocationResponse`) sustituye a `municipality`; ficha y listado incluyen `current_assignment`. Incidente: `active_assignments_count`.
+- Errores: 409 `resource_already_assigned`, `version_conflict`; 422 `resource_inactive`, `resource_not_available`, `incident_closed`, `assignment_already_released`, `assignment_already_arrived`, `resource_assigned`, `invalid_release_reason`; 404 `assignment_not_found`, `resource_not_found`. La base reutiliza `location_out_of_area` y `coordinates_incomplete`.
+
+**Permisos**
+- Nuevos: `assignments:manage` (asignar, retirar, reasignar) para admin y coordinator; `assignments:update` (marcar «en el lugar») para admin, coordinator y operator. El operador no asigna ni retira.
+
+**Frontend**
+- Ficha del incidente: panel «Recursos asignados» (código, tipo, organización, estado de la asignación, ETA estimada; acciones «En el lugar» y «Retirar» con motivo y confirmación) y diálogo «Asignar recurso» (candidatos por ETA, tipo sugerido marcado, filtros, opción de incluir asignados con aviso de reasignación; sin preselección).
+- Panel lateral del centro de mando con los asignados y su ETA; indicador de recursos asignados en la lista de incidentes activos.
+- Recursos: base (municipio y coordenadas, «Elegir en el mapa») en ficha y formulario, asignación actual con enlace al incidente, cambio de estado deshabilitado si está asignado.
+- Confirmación de cierre/cancelación que enumera los recursos que se retirarán; textos del timeline para los eventos nuevos y la causa automática.
+- `components/ops`: `EtaText` (siempre «estimado») y `ResourceMarker`, también en `/dev/design-system`.
+- **Mapa:** solo las bases de los recursos asignados al incidente seleccionado (`ResourceMarker` distinto del de incidente, nombre accesible con código, tipo y ETA estimada). Sin líneas base → incidente (no hay rutas). Sin capa global de bases. «Ajustar a incidentes» incluye las bases visibles.
+
+**Datos y Fase 5**
+- Migraciones: bases de recursos (traslado del municipio), velocidad por tipo (valores en la migración), `resource_assignments` con su índice parcial, CHECK de `event_type` ampliado (el downgrade se niega si existen eventos nuevos).
+- Seed: bases con coordenadas aproximadas dentro de Asturias, nunca sobre instalaciones reales; asignaciones simuladas coherentes con los estados. Requiere reiniciar la BD de desarrollo.
+- Preparación para la Fase 5: todo cambio de asignación genera su `IncidentEvent` desde un servicio (el EventBus solo tendrá que publicarlos tras el commit); `origin` en la ETA y el diseño de `resource_positions`. Hueco conocido: los cambios manuales de estado de un recurso siguen sin evento.
+
+### 2.9 Fuera de alcance en Fase 4 (no implementar)
+
+Posiciones GPS o móviles de recursos (`resource_positions`), rutas por carretera, OSRM o cualquier API externa o de pago, WebSockets, polling, Redis o tiempo real, preselección o asignación automática, recomendaciones de IA/Ollama, hospitales, notificaciones, estadísticas, auditoría (`AuditLog`), simulador, historial completo de estados de recursos, capa global de bases en el mapa, tiempo de activación en la ETA, isócronas, zonas de cobertura, clustering y layout móvil.
+
+Si una tarea de Fase 4 parece requerir algo de esta lista, **pregunta antes**.
+
 ---
 
 ## 3. Decisiones confirmadas
@@ -290,7 +366,7 @@ En Fase 1 solo se implementan `roles`, `organizations` y `users`. El resto se do
 
 ### Entidades previstas
 
-`Role`, `Organization`, `User`, `Location`, `IncidentType`, `Incident`, `IncidentEvent` (solo inserción), `Resource`, `ResourceAssignment` (índice único parcial: una asignación activa por recurso), `Hospital`, `Notification` y `AuditLog`.
+`Role`, `Organization`, `User`, `Location`, `IncidentType`, `Incident`, `IncidentEvent` (solo inserción), `Resource` (base como `Location` 1:1 desde la Fase 4), `ResourceAssignment` (índice único parcial: una asignación activa por recurso), `Hospital`, `Notification` y `AuditLog`.
 
 ---
 
@@ -490,6 +566,25 @@ La Fase 3 se considera terminada cuando (todos cumplidos y verificados al cierre
 - [x] Tests (352 backend, 95 frontend), `ruff`, `mypy`, `alembic check`, ESLint, type-check y build pasan; verificado desde un clon limpio.
 - [x] README y `docs/architecture.md` actualizados.
 - [x] Solo las dependencias aprobadas: `geoalchemy2` 0.20.0 y `maplibre-gl` 6.13.0.
+
+### 11.4 Fase 4
+
+La Fase 4 se considerará terminada cuando (pendiente; se marcarán al cierre):
+
+- [ ] Cada recurso tiene su base como `Location` 1:1 y el seed les da coordenadas válidas dentro de Asturias, sin instalaciones reales.
+- [ ] Cada tipo de recurso tiene velocidad media; la ETA es `ceil(haversine × 1.4 / velocidad × 60)`, con distancia de 1 decimal, `origin: "base"`, calculada localmente y sin tiempo de activación.
+- [ ] La ETA se guarda al asignar y no cambia retroactivamente; siempre se presenta como «estimado».
+- [ ] Un recurso nunca tiene dos asignaciones activas: lo garantiza el índice único parcial y se prueba con concurrencia; un incidente admite varios recursos.
+- [ ] Asignar, marcar «en el lugar», retirar (con motivo obligatorio) y reasignar (explícita y atómica) actualizan de forma coherente recurso, incidente, `version` e historial en una sola transacción.
+- [ ] `resources_assigned` solo se alcanza y se abandona automáticamente según §2.8; `arrived_at` no cambia el estado del incidente.
+- [ ] Cerrar o cancelar un incidente retira automáticamente sus asignaciones activas, con confirmación previa que enumera los recursos.
+- [ ] Ningún cambio manual de estado deja un recurso en contradicción con sus asignaciones.
+- [ ] Permisos de §2.8 aplicados en el backend y reflejados en la interfaz (el operador marca la llegada, pero no asigna ni retira).
+- [ ] Candidatos ordenados por ETA con tipos sugeridos marcados, sin preselección ni asignación automática.
+- [ ] Ficha del incidente, panel lateral, ficha de recurso y mapa (solo bases de los asignados al incidente seleccionado) muestran asignaciones y ETA con datos reales.
+- [ ] Ningún elemento de §2.9 implementado.
+- [ ] Tests, `ruff`, `mypy`, `alembic check`, ESLint, type-check y build pasan; verificado desde un clon limpio.
+- [ ] README y `docs/architecture.md` actualizados.
 
 ---
 
