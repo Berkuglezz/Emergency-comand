@@ -48,3 +48,32 @@ async def test_unhandled_errors_do_not_leak_details(app: FastAPI) -> None:
     assert response.status_code == 500
     assert response.json() == {"detail": "internal_error"}
     assert "hunter2" not in response.text
+
+
+async def test_validation_errors_do_not_echo_the_input(app: FastAPI, client: AsyncClient) -> None:
+    from pydantic import BaseModel
+
+    class Body(BaseModel):
+        value: float
+
+    @app.post("/_test/validate")
+    async def _validate(body: Body) -> None:
+        return None
+
+    response = await client.post(
+        "/_test/validate",
+        content='{"value": "secret-value"}',
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": [
+            {
+                "type": "float_parsing",
+                "loc": ["body", "value"],
+                "msg": "Input should be a valid number, unable to parse string as a number",
+            }
+        ]
+    }
+    assert "secret-value" not in response.text

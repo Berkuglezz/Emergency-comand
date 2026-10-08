@@ -140,6 +140,8 @@ async def test_create_incident(
     assert incident["location"] == {
         "municipality": "Gijón",
         "description": "Zona baja (ubicación simulada)",
+        "latitude": None,
+        "longitude": None,
     }
     assert "municipality" not in incident
 
@@ -355,43 +357,6 @@ async def test_update_without_changes_records_nothing(
         assert response.json()["updated_at"] == incident["updated_at"]
 
     assert len(await _events(client, admin, incident["id"])) == 1
-
-
-async def test_location_change_bumps_version_once(
-    client: AsyncClient, session: AsyncSession, headers: dict[RoleCode, Headers]
-) -> None:
-    admin = headers[RoleCode.ADMIN]
-    incident = await _create(client, session, admin)
-    path = f"{API}/incidents/{incident['id']}"
-
-    # Solo cambia la ubicación (otra tabla): la versión del incidente sube igual.
-    response = await client.patch(
-        path,
-        json={"version": 1, "location": {"municipality": "Gijón", "description": "Puerto"}},
-        headers=admin,
-    )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["version"] == 2
-    assert body["location"] == {"municipality": "Gijón", "description": "Puerto"}
-    assert body["updated_at"] > incident["updated_at"]
-    events = await _events(client, admin, incident["id"])
-    assert [e["event_type"] for e in events] == ["incident_created", "incident_updated"]
-    assert events[1]["payload"] == {"fields": ["location_description", "municipality"]}
-
-    # La ubicación se sustituye completa: sin descripción, queda vacía.
-    response = await client.patch(
-        path, json={"version": 2, "location": {"municipality": "Gijón"}}, headers=admin
-    )
-    assert response.json()["location"] == {"municipality": "Gijón", "description": None}
-    assert response.json()["version"] == 3
-
-    # Un cambio de ubicación con una versión obsoleta no se aplica.
-    response = await client.patch(
-        path, json={"version": 2, "location": {"municipality": "Avilés"}}, headers=admin
-    )
-    assert response.status_code == 409
-    assert (await client.get(path, headers=admin)).json()["location"]["municipality"] == "Gijón"
 
 
 @pytest.mark.parametrize(

@@ -20,7 +20,12 @@ const INCIDENT: IncidentDetail = {
   status: "in_progress",
   priority: "high",
   type: { id: "t-1", code: "wildfire", category: "fire", icon: "Flame" },
-  location: { municipality: "Siero", description: "Zona forestal (ubicación simulada)" },
+  location: {
+    municipality: "Siero",
+    description: "Zona forestal (ubicación simulada)",
+    latitude: 43.39,
+    longitude: -5.66,
+  },
   affected_people: null,
   parent_incident_id: null,
   is_simulated: true,
@@ -94,13 +99,18 @@ describe("edición", () => {
     expect(cleared).toEqual({ description: "", version: 4 })
   })
 
-  it("la ubicación se envía completa si cambia cualquiera de sus campos", () => {
+  it("la ubicación se envía completa, conservando las coordenadas actuales", () => {
     expect(toUpdatePayload(values({ location_description: "" }), INCIDENT, "wildfire")).toEqual({
-      location: { municipality: "Siero", description: null },
+      location: { municipality: "Siero", description: null, latitude: 43.39, longitude: -5.66 },
       version: 4,
     })
     expect(toUpdatePayload(values({ municipality: "Gijón" }), INCIDENT, "wildfire")).toEqual({
-      location: { municipality: "Gijón", description: "Zona forestal (ubicación simulada)" },
+      location: {
+        municipality: "Gijón",
+        description: "Zona forestal (ubicación simulada)",
+        latitude: 43.39,
+        longitude: -5.66,
+      },
       version: 4,
     })
   })

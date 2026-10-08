@@ -227,6 +227,29 @@ describe("detalle de incidente", () => {
     expect(patch?.body).toEqual({ title: "Título corregido", version: 1 })
   })
 
+  it("al editar la ubicación conserva las coordenadas y lo refleja en el historial", async () => {
+    const incident = backend.incidents.add({
+      title: "Con coordenadas",
+      coordinates: { latitude: 43.3614, longitude: -5.8494 },
+    })
+    backend.startSessionFor("coordinator")
+    const { user } = renderApp(`/incidents/${incident.id}`)
+    await screen.findByRole("heading", { name: "Con coordenadas" })
+
+    await user.click(screen.getByRole("button", { name: "Editar" }))
+    const municipality = screen.getByLabelText("Municipio")
+    await user.clear(municipality)
+    await user.type(municipality, "Siero")
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+
+    expect(await screen.findByText("Ubicación cambiada: municipio")).toBeInTheDocument()
+    const patch = backend.calls.find((call) => call.method === "PATCH")
+    expect(patch?.body).toEqual({
+      location: { municipality: "Siero", description: null, latitude: 43.3614, longitude: -5.8494 },
+      version: 1,
+    })
+  })
+
   it("añade notas al historial", async () => {
     const incident = backend.incidents.add({ title: "Con notas" })
     backend.startSessionFor("coordinator")

@@ -60,6 +60,7 @@ export interface IncidentSeed {
   typeCode?: string
   parentCode?: string
   isSimulated?: boolean
+  coordinates?: { latitude: number; longitude: number }
 }
 
 export class FakeIncidents {
@@ -80,7 +81,7 @@ export class FakeIncidents {
         type_id: type.id,
         title: seed.title,
         priority: seed.priority ?? type.default_priority,
-        location: { municipality: "Oviedo" },
+        location: { municipality: "Oviedo", ...seed.coordinates },
         parent_incident_id: parent?.id ?? null,
       },
       null,
@@ -185,14 +186,30 @@ export class FakeIncidents {
           changed.push(field)
         }
       }
-      // Como el backend: la ubicación se sustituye completa y sus cambios se
-      // registran con los nombres de campo de siempre.
+      // Como el backend: la ubicación se sustituye completa y sus cambios van
+      // en un `location_changed` propio, con el antes y el después.
       if (input.location) {
-        const location = input.location as Schemas["LocationInput"]
-        const description = location.description === "" ? null : (location.description ?? null)
-        if (location.municipality !== incident.location.municipality) changed.push("municipality")
-        if (description !== incident.location.description) changed.push("location_description")
-        incident.location = { municipality: location.municipality, description }
+        const sent = input.location as Schemas["LocationInput"]
+        const next: Schemas["LocationResponse"] = {
+          municipality: sent.municipality,
+          description: sent.description === "" ? null : (sent.description ?? null),
+          latitude: sent.latitude ?? null,
+          longitude: sent.longitude ?? null,
+        }
+        const before = incident.location
+        const fields = (["municipality", "description"] as const).filter(
+          (field) => next[field] !== before[field]
+        ) as string[]
+        if (next.latitude !== before.latitude || next.longitude !== before.longitude)
+          fields.push("coordinates")
+        if (fields.length > 0) {
+          this.record(incident, user, "location_changed", {
+            fields: fields.sort(),
+            from: before,
+            to: next,
+          })
+          incident.location = next
+        }
       }
       if (typeof input.priority === "string" && input.priority !== incident.priority) {
         this.record(incident, user, "priority_changed", {
@@ -238,6 +255,8 @@ export class FakeIncidents {
       location: {
         municipality: data.location.municipality,
         description: data.location.description ?? null,
+        latitude: data.location.latitude ?? null,
+        longitude: data.location.longitude ?? null,
       },
       affected_people: data.affected_people ?? null,
       parent_incident_id: data.parent_incident_id ?? null,

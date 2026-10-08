@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.v1.deps import CurrentUserDep, IncidentServiceDep, require_permission
 from app.core.permissions import Permission
 from app.domain.enums import IncidentPriority, IncidentStatus
+from app.domain.geo import parse_bbox
 from app.domain.incident_rules import allowed_transitions
-from app.models import IncidentEvent, User
+from app.models import Incident, IncidentEvent, User
 from app.repositories.incidents import IncidentListQuery
 from app.schemas.errors import ErrorResponse
 from app.schemas.incidents import (
@@ -15,6 +16,9 @@ from app.schemas.incidents import (
     IncidentCreate,
     IncidentDetail,
     IncidentEventResponse,
+    IncidentMapCollection,
+    IncidentMapFeature,
+    IncidentMapProperties,
     IncidentNoteCreate,
     IncidentPage,
     IncidentRef,
@@ -23,6 +27,7 @@ from app.schemas.incidents import (
     IncidentSummary,
     IncidentTypeResponse,
     IncidentUpdate,
+    PointGeometry,
 )
 from app.services.incidents import IncidentView
 
@@ -56,6 +61,26 @@ def _detail(view: IncidentView) -> IncidentDetail:
     )
 
 
+def _map_feature(incident: Incident) -> IncidentMapFeature:
+    location = incident.location
+    # Solo se llama con incidentes con coordenadas (lo garantiza la consulta).
+    if location.latitude is None or location.longitude is None:  # pragma: no cover
+        raise ValueError("incidente sin coordenadas en el mapa")
+    return IncidentMapFeature(
+        geometry=PointGeometry(coordinates=(location.longitude, location.latitude)),
+        properties=IncidentMapProperties(
+            id=incident.id,
+            code=incident.code,
+            title=incident.title,
+            status=incident.status,
+            priority=incident.priority,
+            type_code=incident.type.code,
+            type_icon=incident.type.icon,
+            is_simulated=incident.is_simulated,
+        ),
+    )
+
+
 def _event(event: IncidentEvent, actor: User | None) -> IncidentEventResponse:
     return IncidentEventResponse(
         id=event.id,
@@ -81,6 +106,7 @@ async def list_incidents(
     active: bool = True,
     q: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
     parent_id: uuid.UUID | None = None,
+    has_coordinates: bool | None = None,
     sort: IncidentSort = "priority",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -93,6 +119,7 @@ async def list_incidents(
         active_only=active,
         search=q,
         parent_id=parent_id,
+        has_coordinates=has_coordinates,
         sort=sort,
         limit=limit,
         offset=offset,
@@ -103,6 +130,37 @@ async def list_incidents(
         total=total,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/map", dependencies=_READ)
+async def map_incidents(
+    service: IncidentServiceDep,
+    status_filter: Annotated[list[IncidentStatus] | None, Query(alias="status")] = None,
+    priority: Annotated[list[IncidentPriority] | None, Query()] = None,
+    active: bool = True,
+    bbox: Annotated[
+        str | None,
+        Query(
+            max_length=100,
+            description="Rectángulo `minLon,minLat,maxLon,maxLat` (WGS84, orden GeoJSON).",
+        ),
+    ] = None,
+) -> IncidentMapCollection:
+    """Incidentes con coordenadas como `FeatureCollection` GeoJSON, con los mismos
+    filtros de estado y prioridad que el listado (por defecto, solo activos).
+
+    Datos mínimos para dibujar; el listado sigue siendo `GET /incidents`. Tope
+    de 1.000 elementos (`truncated`); `unlocated_total` cuenta los que cumplen
+    los filtros sin coordenadas."""
+    query = IncidentListQuery(
+        statuses=status_filter or (), priorities=priority or (), active_only=active
+    )
+    result = await service.map_incidents(query, parse_bbox(bbox) if bbox else None)
+    return IncidentMapCollection(
+        features=[_map_feature(incident) for incident in result.incidents],
+        unlocated_total=result.unlocated_total,
+        truncated=result.truncated,
     )
 
 

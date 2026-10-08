@@ -218,6 +218,7 @@
       "reason": "Motivo: {{reason}}",
       "priorityChanged": "Prioridad: {{from}} → {{to}}",
       "updated": "Datos modificados: {{fields}}",
+      "locationChanged": "Ubicación cambiada: {{fields}}",
       "noteAdded": "Nota",
       "parentSet": "Agrupado en {{to}}",
       "parentRemoved": "Separado de {{from}}",
@@ -322,6 +323,11 @@
     "location_description": "ubicación",
     "affected_people": "personas afectadas",
     "details": "datos del tipo"
+  },
+  "locationFields": {
+    "municipality": "municipio",
+    "description": "descripción",
+    "coordinates": "coordenadas"
   },
   "incidentDetails": {
     "affected_hectares": "Superficie afectada (ha)",

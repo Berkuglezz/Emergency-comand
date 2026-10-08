@@ -24,6 +24,7 @@ from app.db.session import build_database_url
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 BEFORE = "48bc2488f9e1"  # incidentes y recursos (Fase 2)
 LOCATIONS = "16ed0556ad5c"  # ubicaciones (Fase 3.1)
+LOCATION_CHANGED = "22b43ff4025b"  # evento location_changed (Fase 3.2)
 
 
 def _alembic() -> Config:
@@ -163,3 +164,23 @@ def test_locations_migration_moves_data_and_downgrades(migration_db: Settings) -
     # Y se puede volver a migrar.
     command.upgrade(_alembic(), "head")
     assert "location_id" in _columns(settings, "incidents")
+
+
+def test_location_changed_downgrade_is_refused_when_events_exist(migration_db: Settings) -> None:
+    settings = migration_db
+    command.upgrade(_alembic(), LOCATION_CHANGED)
+    asyncio.run(
+        _run(
+            settings,
+            "WITH loc AS (INSERT INTO locations (municipality) VALUES ('Oviedo') RETURNING id),"
+            " inc AS (INSERT INTO incidents (code, type_id, title, status, priority, location_id)"
+            " SELECT 'INC-000001', t.id, 'x', 'received', 'medium', loc.id"
+            " FROM incident_types t, loc WHERE t.code = 'flood' RETURNING id)"
+            " INSERT INTO incident_events (incident_id, event_type)"
+            " SELECT id, 'location_changed' FROM inc",
+        )
+    )
+
+    # El historial es de solo inserción: no se puede volver a un CHECK sin ese tipo.
+    with pytest.raises(RuntimeError, match="location_changed"):
+        command.downgrade(_alembic(), LOCATIONS)

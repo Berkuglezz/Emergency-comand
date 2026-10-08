@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.domain.exceptions import (
@@ -48,6 +49,22 @@ async def _domain_error_handler(_: Request, exc: Exception) -> JSONResponse:
     return domain_error_response(exc if isinstance(exc, DomainError) else DomainError())
 
 
+async def _validation_error_handler(_: Request, exc: Exception) -> JSONResponse:
+    """422 de validación con el formato de FastAPI (`detail` = lista), pero sin
+    `input` ni `ctx`: no se devuelven los valores recibidos (pueden ser datos
+    sensibles, como coordenadas) y un `NaN` no rompe la respuesta JSON."""
+    errors = exc.errors() if isinstance(exc, RequestValidationError) else []
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={
+            "detail": [
+                {"type": error["type"], "loc": list(error["loc"]), "msg": error["msg"]}
+                for error in errors
+            ]
+        },
+    )
+
+
 async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
     # Se registra el tipo y la ruta, no el mensaje: podría contener datos sensibles.
     logger.error(
@@ -64,4 +81,5 @@ async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResp
 
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(DomainError, _domain_error_handler)
+    app.add_exception_handler(RequestValidationError, _validation_error_handler)
     app.add_exception_handler(Exception, _unhandled_error_handler)

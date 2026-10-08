@@ -196,12 +196,17 @@ export function toUpdatePayload(
 
   if (next.title !== incident.title) changes.title = next.title
   if (next.priority && next.priority !== incident.priority) changes.priority = next.priority
-  // La ubicación se envía completa: sustituye a la anterior.
+  // La ubicación se envía completa: sustituye a la anterior. El formulario aún
+  // no edita coordenadas, así que se reenvían las actuales para no borrarlas.
   if (
     next.location.municipality !== incident.location.municipality ||
     (next.location.description ?? null) !== incident.location.description
   )
-    changes.location = next.location
+    changes.location = {
+      ...next.location,
+      latitude: incident.location.latitude,
+      longitude: incident.location.longitude,
+    }
   // Vaciar un texto opcional se envía como "" (el backend lo guarda como nulo).
   if (next.description !== incident.description) changes.description = next.description ?? ""
   if (next.affected_people !== incident.affected_people)

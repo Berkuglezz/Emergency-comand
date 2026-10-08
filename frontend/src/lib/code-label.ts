@@ -6,6 +6,7 @@ export type CodeGroup =
   | "incidentCategories"
   | "incidentRisks"
   | "incidentFields"
+  | "locationFields"
   | "resourceTypes"
   | "resourceCategories"
 
@@ -22,6 +23,7 @@ export function useCodeLabel(): (group: CodeGroup, code: string) => string {
       incidentCategories: t("incidentCategories", { returnObjects: true }),
       incidentRisks: t("incidentRisks", { returnObjects: true }),
       incidentFields: t("incidentFields", { returnObjects: true }),
+      locationFields: t("locationFields", { returnObjects: true }),
       resourceTypes: t("resourceTypes", { returnObjects: true }),
       resourceCategories: t("resourceCategories", { returnObjects: true }),
     }

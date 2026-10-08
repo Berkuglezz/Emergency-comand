@@ -21,6 +21,7 @@ from app.domain.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
+from app.domain.geo import BoundingBox, validate_coordinates
 from app.domain.incident_details import validate_details
 from app.domain.incident_rules import (
     CLOSING_STATUSES,
@@ -29,6 +30,7 @@ from app.domain.incident_rules import (
     can_transition,
 )
 from app.models import Incident, IncidentEvent, IncidentType, Location, User
+from app.models.location import point
 from app.repositories.incidents import IncidentListQuery, IncidentRepository
 from app.schemas.incidents import (
     IncidentCreate,
@@ -45,10 +47,24 @@ _PLAIN_FIELDS = ("title", "description", "affected_people")
 _NOT_NULLABLE = frozenset({"title", "location", "priority", "details"})
 
 
+# Tope de elementos del mapa: no hay paginación (un mapa paginado no tiene sentido).
+MAP_FEATURE_LIMIT = 1000
+
+
 @dataclass(frozen=True, slots=True)
 class IncidentView:
     incident: Incident
     children: Sequence[Incident]
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentMap:
+    """Incidentes con coordenadas para el mapa, los que cumplen los filtros sin
+    tenerlas y si se alcanzó el tope."""
+
+    incidents: Sequence[Incident]
+    unlocated_total: int
+    truncated: bool
 
 
 class _EventRecorder:
@@ -75,18 +91,49 @@ class _EventRecorder:
         return event
 
 
-def _apply_location(location: Location, data: LocationInput) -> list[str]:
-    """Sustituye la ubicación completa. Devuelve los campos que cambiaron, con
-    los nombres que ya usa el historial (`municipality`, `location_description`)."""
-    changed: list[str] = []
-    description = data.description or None  # cadena vacía = sin valor
-    if location.municipality != data.municipality:
-        location.municipality = data.municipality
-        changed.append("municipality")
-    if location.description != description:
-        location.description = description
-        changed.append("location_description")
-    return changed
+def _new_location(data: LocationInput) -> Location:
+    coordinates = validate_coordinates(data.latitude, data.longitude)
+    return Location(
+        municipality=data.municipality,
+        description=data.description or None,  # cadena vacía = sin valor
+        geom=point(*coordinates) if coordinates else None,
+    )
+
+
+def _location_snapshot(location: Location) -> dict[str, Any]:
+    return {
+        "municipality": location.municipality,
+        "description": location.description,
+        "latitude": location.latitude,
+        "longitude": location.longitude,
+    }
+
+
+def _apply_location(location: Location, data: LocationInput) -> dict[str, Any] | None:
+    """Sustituye la ubicación completa. Si algo cambia, devuelve el payload de
+    `location_changed` (campos cambiados, antes y después); si no, `None`.
+
+    Las coordenadas van al historial (protegido por `incidents:read`), nunca a
+    los logs."""
+    coordinates = validate_coordinates(data.latitude, data.longitude)
+    before = _location_snapshot(location)
+    after = {
+        "municipality": data.municipality,
+        "description": data.description or None,
+        "latitude": data.latitude,
+        "longitude": data.longitude,
+    }
+    fields = [name for name in ("municipality", "description") if before[name] != after[name]]
+    if (before["latitude"], before["longitude"]) != (after["latitude"], after["longitude"]):
+        fields.append("coordinates")
+    if not fields:
+        return None
+
+    location.municipality = data.municipality
+    location.description = data.description or None
+    if "coordinates" in fields:
+        location.geom = point(*coordinates) if coordinates else None
+    return {"fields": sorted(fields), "from": before, "to": after}
 
 
 class IncidentService:
@@ -101,6 +148,19 @@ class IncidentService:
 
     async def list_incidents(self, query: IncidentListQuery) -> tuple[Sequence[Incident], int]:
         return await self._incidents.list(query)
+
+    async def map_incidents(
+        self, query: IncidentListQuery, bbox: BoundingBox | None
+    ) -> IncidentMap:
+        """Incidentes con coordenadas (dentro de `bbox`, si se indica) para el
+        mapa, más urgentes primero. Solo se usan los filtros de estado,
+        prioridad y activos de `query`. No sustituye al listado."""
+        incidents = await self._incidents.map_items(query, bbox, MAP_FEATURE_LIMIT + 1)
+        return IncidentMap(
+            incidents=incidents[:MAP_FEATURE_LIMIT],
+            unlocated_total=await self._incidents.count_unlocated(query),
+            truncated=len(incidents) > MAP_FEATURE_LIMIT,
+        )
 
     async def get_incident(self, incident_id: uuid.UUID) -> IncidentView:
         incident = await self._incidents.get(incident_id)
@@ -132,10 +192,7 @@ class IncidentService:
             description=data.description or None,
             status=INITIAL_STATUS,
             priority=data.priority or incident_type.default_priority,
-            location=Location(
-                municipality=data.location.municipality,
-                description=data.location.description or None,
-            ),
+            location=_new_location(data.location),
             affected_people=data.affected_people,
             details=details,
             parent_incident_id=parent.id if parent else None,
@@ -206,11 +263,9 @@ class IncidentService:
                 if getattr(incident, name) != value:
                     setattr(incident, name, value)
                     changed.append(name)
-        location_edited = False
+        location_change = None
         if "location" in sent and data.location is not None:
-            location_fields = _apply_location(incident.location, data.location)
-            changed.extend(location_fields)
-            location_edited = bool(location_fields)
+            location_change = _apply_location(incident.location, data.location)
         if "details" in sent and data.details is not None:
             details = validate_details(incident.type.details_schema_key, data.details)
             if details != incident.details:
@@ -218,7 +273,8 @@ class IncidentService:
                 changed.append("details")
         if changed:
             events.record(incident, IncidentEventType.INCIDENT_UPDATED, {"fields": sorted(changed)})
-        if location_edited:
+        if location_change:
+            events.record(incident, IncidentEventType.LOCATION_CHANGED, location_change)
             # La ubicación vive en otra tabla: sin tocar la fila del incidente,
             # `version` no subiría y el bloqueo optimista no cubriría el cambio.
             incident.updated_at = now

@@ -148,6 +148,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/incidents/map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Map Incidents
+         * @description Incidentes con coordenadas como `FeatureCollection` GeoJSON, con los mismos
+         *     filtros de estado y prioridad que el listado (por defecto, solo activos).
+         *
+         *     Datos mínimos para dibujar; el listado sigue siendo `GET /incidents`. Tope
+         *     de 1.000 elementos (`truncated`); `unlocated_total` cuenta los que cumplen
+         *     los filtros sin coordenadas.
+         */
+        get: operations["map_incidents_api_v1_incidents_map_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/incidents/{incident_id}": {
         parameters: {
             query?: never;
@@ -476,7 +501,7 @@ export interface components {
          * @description Tipos de entrada del historial funcional del incidente (timeline).
          * @enum {string}
          */
-        IncidentEventType: "incident_created" | "status_changed" | "priority_changed" | "incident_updated" | "note_added" | "parent_changed";
+        IncidentEventType: "incident_created" | "status_changed" | "priority_changed" | "incident_updated" | "note_added" | "parent_changed" | "location_changed";
         /** IncidentKpis */
         IncidentKpis: {
             /** Active Total */
@@ -493,6 +518,59 @@ export interface components {
             affected_people: number;
             /** Reported Last 24H */
             reported_last_24h: number;
+        };
+        /**
+         * IncidentMapCollection
+         * @description `FeatureCollection` GeoJSON con dos miembros propios: incidentes que
+         *     cumplen los filtros pero no tienen coordenadas, y si se alcanzó el tope.
+         */
+        IncidentMapCollection: {
+            /**
+             * Type
+             * @default FeatureCollection
+             * @constant
+             */
+            type: "FeatureCollection";
+            /** Features */
+            features: components["schemas"]["IncidentMapFeature"][];
+            /** Unlocated Total */
+            unlocated_total: number;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** IncidentMapFeature */
+        IncidentMapFeature: {
+            /**
+             * Type
+             * @default Feature
+             * @constant
+             */
+            type: "Feature";
+            geometry: components["schemas"]["PointGeometry"];
+            properties: components["schemas"]["IncidentMapProperties"];
+        };
+        /**
+         * IncidentMapProperties
+         * @description Lo mínimo para dibujar y seleccionar; el detalle sale de `GET /incidents/{id}`.
+         */
+        IncidentMapProperties: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Title */
+            title: string;
+            status: components["schemas"]["IncidentStatus"];
+            priority: components["schemas"]["IncidentPriority"];
+            /** Type Code */
+            type_code: string;
+            /** Type Icon */
+            type_icon: string;
+            /** Is Simulated */
+            is_simulated: boolean;
         };
         /** IncidentNoteCreate */
         IncidentNoteCreate: {
@@ -639,13 +717,20 @@ export interface components {
         };
         /**
          * LocationInput
-         * @description Ubicación completa: en una edición sustituye a la anterior.
+         * @description Ubicación completa: en una edición sustituye a la anterior (omitir las
+         *     coordenadas las borra). Coordenadas: ambas o ninguna, y dentro del área de
+         *     la demo (lo comprueba el servicio: `coordinates_incomplete`,
+         *     `location_out_of_area`).
          */
         LocationInput: {
             /** Municipality */
             municipality: string;
             /** Description */
             description?: string | null;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
         };
         /** LocationResponse */
         LocationResponse: {
@@ -653,6 +738,10 @@ export interface components {
             municipality: string;
             /** Description */
             description: string | null;
+            /** Latitude */
+            latitude: number | null;
+            /** Longitude */
+            longitude: number | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -712,6 +801,20 @@ export interface components {
          * @enum {string}
          */
         Permission: "incidents:read" | "incidents:create" | "incidents:update" | "incidents:close" | "resources:read" | "resources:update_status" | "resources:manage" | "organizations:read";
+        /** PointGeometry */
+        PointGeometry: {
+            /**
+             * Type
+             * @default Point
+             * @constant
+             */
+            type: "Point";
+            /** Coordinates */
+            coordinates: [
+                number,
+                number
+            ];
+        };
         /**
          * ResourceCategory
          * @enum {string}
@@ -1176,6 +1279,7 @@ export interface operations {
                 active?: boolean;
                 q?: string | null;
                 parent_id?: string | null;
+                has_coordinates?: boolean | null;
                 sort?: "priority" | "-reported_at" | "reported_at" | "-updated_at";
                 limit?: number;
                 offset?: number;
@@ -1262,6 +1366,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IncidentDetail"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    map_incidents_api_v1_incidents_map_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["IncidentStatus"][] | null;
+                priority?: components["schemas"]["IncidentPriority"][] | null;
+                active?: boolean;
+                /** @description Rectángulo `minLon,minLat,maxLon,maxLat` (WGS84, orden GeoJSON). */
+                bbox?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentMapCollection"];
                 };
             };
             /** @description Unauthorized */

@@ -1,17 +1,19 @@
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import ColumnElement, Select, case, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import contains_eager, joinedload
 
 from app.domain.enums import IncidentPriority, IncidentStatus
+from app.domain.geo import BoundingBox
 from app.domain.incident_rules import ACTIVE_STATUSES, PRIORITY_RANK
-from app.models import Incident, IncidentEvent, IncidentType, User
+from app.models import Incident, IncidentEvent, IncidentType, Location, User
 from app.models.incident import INCIDENT_CODE_SEQUENCE
+from app.models.location import LOCATION_SRID
 
 INCIDENT_CODE_PREFIX = "INC-"
 INCIDENT_CODE_DIGITS = 6
@@ -27,6 +29,8 @@ class IncidentListQuery:
     active_only: bool = True
     search: str | None = None
     parent_id: uuid.UUID | None = None
+    # None = todos; True/False = solo con / sin coordenadas.
+    has_coordinates: bool | None = None
     sort: str = "priority"
     limit: int = 50
     offset: int = 0
@@ -113,6 +117,34 @@ class IncidentRepository:
         items = (await self._session.scalars(statement)).unique().all()
         return items, total or 0
 
+    async def map_items(
+        self, query: IncidentListQuery, bbox: BoundingBox | None, limit: int
+    ) -> Sequence[Incident]:
+        """Incidentes con coordenadas para el mapa, más urgentes primero. Es la
+        única consulta espacial: `&&` con el rectángulo usa el índice GiST."""
+        statement = self._filtered(replace(query, has_coordinates=True))
+        if bbox is not None:
+            envelope = func.ST_MakeEnvelope(
+                bbox.min_longitude,
+                bbox.min_latitude,
+                bbox.max_longitude,
+                bbox.max_latitude,
+                LOCATION_SRID,
+            )
+            statement = statement.where(Location.geom.intersects(envelope))
+        statement = (
+            statement.options(joinedload(Incident.type), contains_eager(Incident.location))
+            .order_by(*self._ordering("priority"))
+            .limit(limit)
+        )
+        return (await self._session.scalars(statement)).unique().all()
+
+    async def count_unlocated(self, query: IncidentListQuery) -> int:
+        """Incidentes que cumplen los filtros pero no tienen coordenadas."""
+        filtered = self._filtered(replace(query, has_coordinates=False))
+        statement = select(func.count()).select_from(filtered.order_by(None).subquery())
+        return await self._session.scalar(statement) or 0
+
     async def count_active(self) -> Sequence[ActiveIncidentCount]:
         """Incidentes activos agrupados por estado y prioridad, con la suma de
         personas afectadas (`affected_people` nulo cuenta como 0)."""
@@ -149,6 +181,10 @@ class IncidentRepository:
             statement = statement.join(Incident.type).where(IncidentType.code == query.type_code)
         if query.parent_id:
             statement = statement.where(Incident.parent_incident_id == query.parent_id)
+        if query.has_coordinates is not None:
+            statement = statement.join(Incident.location).where(
+                Location.geom.is_not(None) if query.has_coordinates else Location.geom.is_(None)
+            )
         if query.search:
             pattern = f"%{escape_like(query.search)}%"
             statement = statement.where(

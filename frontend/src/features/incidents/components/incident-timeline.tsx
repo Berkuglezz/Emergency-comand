@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import { Panel, type PanelStatus } from "@/components/ops/panel"
 import { PRIORITY_CODES } from "@/components/ops/priority"
 import { formatDateTime } from "@/lib/format"
-import { useCodeLabel } from "@/lib/code-label"
+import { type CodeGroup, useCodeLabel } from "@/lib/code-label"
 import { cn } from "@/lib/utils"
 
 import { useIncidentEvents } from "../hooks"
@@ -57,7 +57,7 @@ export function TimelineEntry({ event }: { event: IncidentEvent }) {
   const { t } = useTranslation()
   const label = useCodeLabel()
   const Icon = EVENT_ICONS[event.event_type]
-  const { text, detail } = describeEvent(event, t, (code) => label("incidentFields", code))
+  const { text, detail } = describeEvent(event, t, label)
 
   return (
     <li className="flex gap-2 border-l py-1.5 pl-3 first:pt-0 last:pb-0">
@@ -93,9 +93,14 @@ function text(value: unknown): string | null {
 function describeEvent(
   event: IncidentEvent,
   t: TFunction,
-  fieldLabel: (code: string) => string
+  label: (group: CodeGroup, code: string) => string
 ): { text: string; detail: string | null } {
   const payload = event.payload
+  const fields = (group: CodeGroup) =>
+    (Array.isArray(payload.fields) ? payload.fields : [])
+      .filter((field): field is string => typeof field === "string")
+      .map((field) => label(group, field))
+      .join(", ")
   const status = (value: unknown) => {
     const code = text(value)
     return code && (STATUS_CODES as string[]).includes(code)
@@ -140,15 +145,17 @@ function describeEvent(
         }),
         detail: null,
       }
-    case "incident_updated": {
-      const fields = Array.isArray(payload.fields)
-        ? payload.fields.filter((field): field is string => typeof field === "string")
-        : []
+    case "incident_updated":
       return {
-        text: t("incidents.timeline.updated", { fields: fields.map(fieldLabel).join(", ") }),
+        text: t("incidents.timeline.updated", { fields: fields("incidentFields") }),
         detail: null,
       }
-    }
+    // Solo qué cambió; el antes/después de la ubicación se mostrará en la Fase 3.6.
+    case "location_changed":
+      return {
+        text: t("incidents.timeline.locationChanged", { fields: fields("locationFields") }),
+        detail: null,
+      }
     case "note_added":
       return { text: t("incidents.timeline.noteAdded"), detail: text(payload.text) }
     case "parent_changed": {

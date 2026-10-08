@@ -8,6 +8,7 @@ import {
   Inbox,
   ListChecks,
   type LucideIcon,
+  MapPinned,
   NotebookPen,
   PencilLine,
   ScanSearch,
@@ -60,6 +61,7 @@ export const EVENT_ICONS: Record<IncidentEventType, LucideIcon> = {
   incident_updated: PencilLine,
   note_added: NotebookPen,
   parent_changed: FolderTree,
+  location_changed: MapPinned,
 }
 
 const KNOWN_ERRORS = [

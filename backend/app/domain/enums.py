@@ -60,6 +60,7 @@ class IncidentEventType(StrEnum):
     INCIDENT_UPDATED = "incident_updated"
     NOTE_ADDED = "note_added"
     PARENT_CHANGED = "parent_changed"
+    LOCATION_CHANGED = "location_changed"
 
 
 # --- Recursos ---------------------------------------------------------------
