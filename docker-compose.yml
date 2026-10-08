@@ -71,6 +71,8 @@ services:
     environment:
       # Vite redirige /api al backend; el navegador solo habla con el frontend.
       API_PROXY_TARGET: http://backend:8000
+      # Estilo del mapa base; vacío = OpenFreeMap `dark` (ver .env.example).
+      VITE_MAP_STYLE_URL: ${VITE_MAP_STYLE_URL:-}
     ports:
       - "${FRONTEND_HOST_PORT:-5173}:5173"
     depends_on:

@@ -13,9 +13,19 @@ from app.domain.enums import (
     IncidentStatus,
     ResourceStatus,
 )
-from app.domain.incident_rules import TERMINAL_STATUSES, reachable_statuses
-from app.models import Incident, IncidentEvent, Organization, Resource, ResourceType
+from app.domain.incident_rules import ACTIVE_STATUSES, TERMINAL_STATUSES, reachable_statuses
+from app.models import (
+    Incident,
+    IncidentEvent,
+    Location,
+    Organization,
+    Resource,
+    ResourceType,
+)
+from app.models.location import point
+from app.repositories.incidents import IncidentListQuery
 from app.services.dashboard import DashboardService
+from app.services.incidents import IncidentService
 from seeds.fixtures import INCIDENTS, RESOURCES
 from seeds.operational import incident_id, incident_location_id, resource_id
 from seeds.seed import seed
@@ -75,6 +85,9 @@ async def test_incidents_are_created_and_marked_as_simulated(session: AsyncSessi
         assert incident.location_id == incident_location_id(fixture.key)
         assert incident.location.municipality == fixture.municipality
         assert incident.location.description and "simulada" in incident.location.description
+        assert (incident.location.latitude, incident.location.longitude) == (
+            fixture.coordinates or (None, None)
+        )
         assert incident.status == fixture.status
         assert incident.priority == fixture.priority
         assert (incident.closed_at is not None) == (incident.status in TERMINAL_STATUSES)
@@ -265,3 +278,34 @@ async def test_existing_resource_with_a_seed_code_is_left_alone(session: AsyncSe
     assert "resource:SIM-BOV-01" not in report.created
     manual = (await session.scalars(select(Resource).where(Resource.code == "SIM-BOV-01"))).one()
     assert manual.name == "Creado a mano"
+
+
+async def test_seeded_map_shows_located_and_unlocated_incidents(session: AsyncSession) -> None:
+    await seed(session, DEMO_PASSWORD)
+
+    result = await IncidentService(session).map_incidents(IncidentListQuery(), None)
+
+    active = [f for f in INCIDENTS if f.status in ACTIVE_STATUSES]
+    assert {incident.id for incident in result.incidents} == {
+        incident_id(f.key) for f in active if f.coordinates is not None
+    }
+    assert result.unlocated_total == sum(1 for f in active if f.coordinates is None)
+    assert result.truncated is False
+
+
+async def test_existing_locations_are_not_touched(session: AsyncSession) -> None:
+    await seed(session, DEMO_PASSWORD)
+    moved = await session.get(Location, incident_location_id("traffic-oviedo"))
+    cleared = await session.get(Location, incident_location_id("wildfire-siero"))
+    assert moved is not None and cleared is not None
+    moved.geom = point(43.4, -5.8)
+    cleared.geom = None
+    await session.commit()
+
+    report = await seed(session, DEMO_PASSWORD)
+
+    assert not report.changed
+    for location in (moved, cleared):
+        await session.refresh(location)
+    assert (moved.latitude, moved.longitude) == (43.4, -5.8)
+    assert cleared.latitude is None

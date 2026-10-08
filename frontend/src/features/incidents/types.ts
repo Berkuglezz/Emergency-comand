@@ -16,8 +16,14 @@ export type IncidentCreate = Schemas["IncidentCreate"]
 export type IncidentUpdate = Schemas["IncidentUpdate"]
 export type IncidentStatusChange = Schemas["IncidentStatusChange"]
 export type IncidentNoteCreate = Schemas["IncidentNoteCreate"]
+export type IncidentLocation = Schemas["LocationResponse"]
+export type IncidentMapCollection = Schemas["IncidentMapCollection"]
+export type IncidentMapFeature = Schemas["IncidentMapFeature"]
 
 export type IncidentListParams = NonNullable<
   operations["list_incidents_api_v1_incidents_get"]["parameters"]["query"]
 >
 export type IncidentSort = NonNullable<IncidentListParams["sort"]>
+export type IncidentMapParams = NonNullable<
+  operations["map_incidents_api_v1_incidents_map_get"]["parameters"]["query"]
+>

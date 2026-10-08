@@ -8,6 +8,7 @@ import {
   createIncident,
   fetchIncident,
   fetchIncidentEvents,
+  fetchIncidentMap,
   fetchIncidents,
   fetchIncidentTypes,
   updateIncident,
@@ -16,6 +17,7 @@ import type {
   IncidentCreate,
   IncidentDetail,
   IncidentListParams,
+  IncidentMapParams,
   IncidentNoteCreate,
   IncidentStatusChange,
   IncidentUpdate,
@@ -39,10 +41,20 @@ export function useIncidents(params: IncidentListParams) {
   })
 }
 
-export function useIncident(id: string) {
+export function useIncidentMap(params: IncidentMapParams) {
+  return useQuery({
+    queryKey: queryKeys.incidentMap(params),
+    queryFn: ({ signal }) => fetchIncidentMap(params, signal),
+    // Al cambiar un filtro los marcadores anteriores se mantienen hasta que llegan los nuevos.
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useIncident(id: string, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.incident(id),
     queryFn: ({ signal }) => fetchIncident(id, signal),
+    enabled: options.enabled,
   })
 }
 

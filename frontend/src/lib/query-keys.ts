@@ -9,6 +9,7 @@ export const queryKeys = {
   /** Prefijo común: invalidarlo refresca listados, detalles e historiales. */
   incidents: ["incidents"] as const,
   incidentList: (params: Record<string, unknown>) => ["incidents", "list", params] as const,
+  incidentMap: (params: Record<string, unknown>) => ["incidents", "map", params] as const,
   incident: (id: string) => ["incidents", "detail", id] as const,
   incidentEvents: (id: string) => ["incidents", "detail", id, "events"] as const,
   resourceTypes: ["resource-types"] as const,

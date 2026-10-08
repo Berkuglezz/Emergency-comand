@@ -8,9 +8,11 @@ prioridades o fichas, y volver a ejecutar el seed no debe deshacerlo.
   siempre el mismo id, en cualquier base de datos.
 - Las horas son relativas al momento de la ejecución que crea cada fila.
 - Cada incidente se crea con su historial completo (`IncidentEvent`),
-  coherente con las reglas reales: transiciones (`can_transition`) y
-  `details` por tipo (`validate_details`). Un fixture incoherente hace fallar
-  el seed sin escribir nada.
+  coherente con las reglas reales: transiciones (`can_transition`), `details`
+  por tipo (`validate_details`) y coordenadas (`validate_coordinates`). Un
+  fixture incoherente hace fallar el seed sin escribir nada.
+- Un incidente que ya existe conserva su ubicación: una base de datos sembrada
+  antes de la Fase 3.3 no recibe coordenadas (se reinicia con `down -v`).
 - Todo lleva `is_simulated = true`. El actor de los eventos es nulo: los
   genera el sistema, no un usuario.
 """
@@ -24,6 +26,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import IncidentEventType
+from app.domain.geo import validate_coordinates
 from app.domain.incident_details import validate_details
 from app.domain.incident_rules import INITIAL_STATUS, TERMINAL_STATUSES, can_transition
 from app.models import (
@@ -35,6 +38,7 @@ from app.models import (
     Resource,
     ResourceType,
 )
+from app.models.location import point
 from app.repositories.incidents import IncidentRepository
 from seeds.fixtures import INCIDENTS, RESOURCES, DemoIncident
 
@@ -111,6 +115,7 @@ async def seed_incidents(session: AsyncSession, now: datetime) -> list[str]:
         events = _history(fixture, incident_type.code, reported_at)
         last_change = events[-1]["occurred_at"]
         closed_at = last_change if fixture.status in TERMINAL_STATUSES else None
+        coordinates = validate_coordinates(*fixture.coordinates) if fixture.coordinates else None
 
         incident = Incident(
             id=incident_id(fixture.key),
@@ -124,6 +129,7 @@ async def seed_incidents(session: AsyncSession, now: datetime) -> list[str]:
                 id=incident_location_id(fixture.key),
                 municipality=fixture.municipality,
                 description=fixture.location_description,
+                geom=point(*coordinates) if coordinates else None,
                 created_at=reported_at,
                 updated_at=reported_at,
             ),

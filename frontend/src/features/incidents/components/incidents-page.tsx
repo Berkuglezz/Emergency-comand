@@ -26,6 +26,8 @@ import { formatDateTime, formatNumber } from "@/lib/format"
 import { returnState } from "@/lib/navigation"
 
 import {
+  COORDINATE_FILTERS,
+  type CoordinateFilter,
   hasActiveFilters,
   type IncidentFilters,
   PAGE_SIZE,
@@ -38,6 +40,7 @@ import { useIncidents, useIncidentTypes } from "../hooks"
 import { incidentErrorMessage, STATUS_CODES } from "../presentation"
 import type { IncidentPriority, IncidentSort, IncidentStatus, IncidentSummary } from "../types"
 import { IncidentStatusPill, IncidentTypeLabel } from "./incident-badges"
+import { UnlocatedMark } from "./unlocated-mark"
 
 /** Listado de incidentes con filtros, orden y paginación guardados en la URL. */
 export function IncidentsPage() {
@@ -167,7 +170,12 @@ function IncidentTable({ items }: { items: IncidentSummary[] }) {
             <TableCell>
               <IncidentTypeLabel type={incident.type} />
             </TableCell>
-            <TableCell>{incident.location.municipality}</TableCell>
+            <TableCell>
+              <span className="flex items-center gap-1.5">
+                {incident.location.municipality}
+                {incident.location.latitude === null && <UnlocatedMark />}
+              </span>
+            </TableCell>
             <TableCell className="font-data text-muted-foreground">
               <time dateTime={incident.reported_at}>{formatDateTime(incident.reported_at)}</time>
             </TableCell>
@@ -257,6 +265,18 @@ function FilterBar({
         options={(types.data ?? []).map((type) => ({
           value: type.code,
           label: label("incidentTypes", type.code),
+        }))}
+      />
+      <FilterSelect
+        id={`${id}-coords`}
+        label={t("incidents.filters.coords")}
+        value={filters.coords ?? ""}
+        onChange={(value) => {
+          onChange({ coords: (value || null) as CoordinateFilter | null })
+        }}
+        options={COORDINATE_FILTERS.map((code) => ({
+          value: code,
+          label: t(`incidents.filters.coordsValues.${code}`),
         }))}
       />
       <FilterSelect

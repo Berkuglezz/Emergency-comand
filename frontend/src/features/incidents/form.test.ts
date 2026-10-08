@@ -8,6 +8,7 @@ import {
   emptyFormValues,
   formValuesFromIncident,
   type IncidentFormValues,
+  parseCoordinate,
   toCreatePayload,
   toUpdatePayload,
 } from "./form"
@@ -65,7 +66,7 @@ describe("alta", () => {
       type_id: "t-2",
       title: "Colisión",
       priority: null,
-      location: { municipality: "Gijón", description: null },
+      location: { municipality: "Gijón", description: null, latitude: null, longitude: null },
       affected_people: null,
       description: null,
       details: {},
@@ -128,8 +129,75 @@ describe("edición", () => {
   })
 })
 
+describe("coordenadas", () => {
+  it("acepta coma o punto decimal y redondea a 6 decimales", () => {
+    expect(parseCoordinate("43,36141249")).toBe(43.361412)
+    expect(parseCoordinate(" -5.849389 ")).toBe(-5.849389)
+    expect(parseCoordinate("")).toBeNull()
+    expect(parseCoordinate("43.36N")).toBeNull()
+  })
+
+  it("el alta envía las coordenadas como números", () => {
+    const payload = toCreatePayload(
+      {
+        ...emptyFormValues(),
+        type_id: "t-2",
+        title: "x",
+        municipality: "Gijón",
+        latitude: "43,5357",
+        longitude: "-5.6615",
+      },
+      null
+    )
+    expect(payload.location).toEqual({
+      municipality: "Gijón",
+      description: null,
+      latitude: 43.5357,
+      longitude: -5.6615,
+    })
+  })
+
+  it("cambiar o quitar coordenadas envía la ubicación completa", () => {
+    expect(
+      toUpdatePayload(values({ latitude: "43.4", longitude: "-5.7" }), INCIDENT, "wildfire")
+    ).toEqual({
+      location: {
+        municipality: "Siero",
+        description: "Zona forestal (ubicación simulada)",
+        latitude: 43.4,
+        longitude: -5.7,
+      },
+      version: 4,
+    })
+    expect(
+      toUpdatePayload(values({ latitude: "", longitude: "" }), INCIDENT, "wildfire")?.location
+    ).toMatchObject({ latitude: null, longitude: null })
+  })
+})
+
 describe("validación", () => {
   const schema = createIncidentFormSchema(i18n.t)
+
+  const valid = { ...emptyFormValues(), type_id: "t-1", title: "x", municipality: "Oviedo" }
+  const issues = (changes: Partial<IncidentFormValues>) =>
+    schema
+      .safeParse({ ...valid, ...changes })
+      .error?.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`) ?? []
+
+  it("coordenadas: ambas o ninguna, en rango y dentro de Asturias", () => {
+    expect(issues({})).toEqual([])
+    expect(issues({ latitude: "43.36", longitude: "-5.85" })).toEqual([])
+    expect(issues({ latitude: "43.36" })).toEqual([
+      "longitude: Indica latitud y longitud, o deja ambas vacías.",
+    ])
+    expect(issues({ latitude: "abc", longitude: "-5.85" })).toEqual([
+      "latitude: Latitud no válida: número decimal entre -90 y 90.",
+    ])
+    // Intercambiadas: en rango, pero fuera del área de la demo.
+    expect(issues({ latitude: "-5.85", longitude: "43.36" })).toEqual([
+      "latitude: La posición está fuera del área de la demo (Asturias). ¿Están intercambiadas la latitud y la longitud?",
+    ])
+  })
 
   it("aplica los mismos límites que el backend", () => {
     const result = schema.safeParse({

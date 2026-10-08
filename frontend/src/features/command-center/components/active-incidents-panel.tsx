@@ -18,17 +18,13 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { IncidentStatusPill } from "@/features/incidents/components/incident-badges"
+import { UnlocatedMark } from "@/features/incidents/components/unlocated-mark"
 import { useIncidents } from "@/features/incidents/hooks"
-import {
-  incidentErrorMessage,
-  isIrreversible,
-  STATUS_CODES,
-} from "@/features/incidents/presentation"
+import { incidentErrorMessage } from "@/features/incidents/presentation"
 import { formatDateTime, formatNumber } from "@/lib/format"
-import { oneOf } from "@/lib/query-string"
 
-// Solo estados activos: cerrados y cancelados no aparecen en el centro de mando.
-const ACTIVE_STATUS_CODES = STATUS_CODES.filter((status) => !isIrreversible(status))
+import { ACTIVE_STATUS_CODES, parseCommandCenterFilters, toActiveQuery } from "../filters"
+
 const LIMIT = 50
 
 interface ActiveIncidentsPanelProps {
@@ -46,15 +42,9 @@ export function ActiveIncidentsPanel({
   const { t } = useTranslation()
   const id = useId()
   const [searchParams, setSearchParams] = useSearchParams()
-  const priority = oneOf(PRIORITY_CODES, searchParams.get("priority"))
-  const status = oneOf(ACTIVE_STATUS_CODES, searchParams.get("status"))
-  const incidents = useIncidents({
-    active: true,
-    priority: priority ? [priority] : undefined,
-    status: status ? [status] : undefined,
-    sort: "priority",
-    limit: LIMIT,
-  })
+  const filters = parseCommandCenterFilters(searchParams)
+  const { priority, status } = filters
+  const incidents = useIncidents({ ...toActiveQuery(filters), sort: "priority", limit: LIMIT })
 
   const setFilter = (key: "priority" | "status", value: string) => {
     const next = new URLSearchParams(searchParams)
@@ -171,7 +161,12 @@ export function ActiveIncidentsPanel({
                 <TableCell>
                   <IncidentStatusPill status={incident.status} />
                 </TableCell>
-                <TableCell>{incident.location.municipality}</TableCell>
+                <TableCell>
+                  <span className="flex items-center gap-1.5">
+                    {incident.location.municipality}
+                    {incident.location.latitude === null && <UnlocatedMark />}
+                  </span>
+                </TableCell>
                 <TableCell className="font-data text-muted-foreground">
                   <time dateTime={incident.reported_at}>
                     {formatDateTime(incident.reported_at)}

@@ -144,6 +144,8 @@ export class FakeIncidents {
       if (this.failList) return error(500, "internal_error")
       return json(200, this.list(query))
     }
+    // Antes que `/incidents/:id`: «map» no es un id.
+    if (method === "GET" && path === "/incidents/map") return json(200, this.map(query))
     if (route === "POST /incidents") {
       if (!can("incidents:create")) return error(403, "permission_denied")
       const stored = this.insert(input as unknown as Schemas["IncidentCreate"], user, false)
@@ -316,18 +318,60 @@ export class FakeIncidents {
     }
   }
 
-  private list(query: URLSearchParams): Schemas["IncidentPage"] {
+  /** Como `GET /incidents/map`: con coordenadas, por prioridad (sin `bbox`). */
+  private map(query: URLSearchParams): Schemas["IncidentMapCollection"] {
+    const matching = this.matching(query)
+    const located = matching.filter((incident) => incident.location.latitude !== null)
+    return {
+      type: "FeatureCollection",
+      features: located.map((incident) => ({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [incident.location.longitude ?? 0, incident.location.latitude ?? 0],
+        },
+        properties: {
+          id: incident.id,
+          code: incident.code,
+          title: incident.title,
+          status: incident.status,
+          priority: incident.priority,
+          type_code: incident.type.code,
+          type_icon: incident.type.icon,
+          is_simulated: incident.is_simulated,
+        },
+      })),
+      unlocated_total: matching.length - located.length,
+      truncated: false,
+    }
+  }
+
+  /** Filtros comunes del listado y del mapa, ordenados por prioridad. */
+  private matching(query: URLSearchParams): Stored[] {
     const statuses = query.getAll("status")
     const priorities = query.getAll("priority")
-    const type = query.get("type")
-    const q = query.get("q")?.toLowerCase()
-    const limit = Number(query.get("limit") ?? 50)
-    const offset = Number(query.get("offset") ?? 0)
-    const filtered = this.incidents
+    return this.incidents
       .filter((incident) => query.get("active") === "false" || !TERMINAL.includes(incident.status))
       .filter((incident) => statuses.length === 0 || statuses.includes(incident.status))
       .filter((incident) => priorities.length === 0 || priorities.includes(incident.priority))
+      .sort(
+        (a, b) => RANK[a.priority] - RANK[b.priority] || b.reported_at.localeCompare(a.reported_at)
+      )
+  }
+
+  private list(query: URLSearchParams): Schemas["IncidentPage"] {
+    const type = query.get("type")
+    const q = query.get("q")?.toLowerCase()
+    const hasCoordinates = query.get("has_coordinates")
+    const limit = Number(query.get("limit") ?? 50)
+    const offset = Number(query.get("offset") ?? 0)
+    const filtered = this.matching(query)
       .filter((incident) => !type || incident.type.code === type)
+      .filter(
+        (incident) =>
+          hasCoordinates === null ||
+          (incident.location.latitude !== null) === (hasCoordinates === "true")
+      )
       .filter(
         (incident) =>
           !q || incident.code.toLowerCase().includes(q) || incident.title.toLowerCase().includes(q)

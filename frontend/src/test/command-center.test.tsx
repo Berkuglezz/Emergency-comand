@@ -1,6 +1,7 @@
 /**
  * Centro de mando con datos reales del backend falso: KPIs, incidentes activos
- * con filtros y selección, panel lateral, resumen de recursos y mapa reservado.
+ * con filtros y selección, panel lateral y resumen de recursos. El mapa se
+ * prueba en `map.test.tsx`.
  */
 import { screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it } from "vitest"
@@ -38,7 +39,7 @@ function seed(): void {
 }
 
 describe("centro de mando", () => {
-  it("muestra KPIs reales y el mapa sigue reservado", async () => {
+  it("muestra KPIs reales", async () => {
     seed()
     backend.startSessionFor("operator")
     renderApp("/")
@@ -50,9 +51,7 @@ describe("centro de mando", () => {
     expect(within(await kpi("Recursos disponibles")).getByText("2")).toBeInTheDocument()
     expect(within(await kpi("Recursos en servicio")).getByText("1")).toBeInTheDocument()
     expect(screen.getByText("Datos de las 12:00:00")).toBeInTheDocument()
-    // Mapa: sin funcionalidad todavía.
     expect(screen.getByRole("heading", { name: "Mapa" })).toBeInTheDocument()
-    expect(screen.getByText("Todavía no hay capas que mostrar en el mapa.")).toBeInTheDocument()
   })
 
   it("lista solo incidentes activos, por prioridad, y filtra desde la URL", async () => {

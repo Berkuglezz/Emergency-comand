@@ -51,6 +51,18 @@ export const TABLE_ROWS: readonly {
   { code: "INC-0031", priority: "low", tone: "inactive", time: "09:41:57" },
 ]
 
+/** Marcadores del mapa: una muestra por estado de borde y prioridad. */
+export const MARKER_SAMPLES: readonly {
+  code: string
+  priority: IncidentPriority
+  status: "received" | "in_progress" | "controlled" | "closed"
+}[] = [
+  { code: "INC-0042", priority: "critical", status: "received" },
+  { code: "INC-0041", priority: "high", status: "in_progress" },
+  { code: "INC-0039", priority: "medium", status: "controlled" },
+  { code: "INC-0035", priority: "low", status: "closed" },
+]
+
 export const KPI_SAMPLES = {
   active: 12,
   critical: 3,

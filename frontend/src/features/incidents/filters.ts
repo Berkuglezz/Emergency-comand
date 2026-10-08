@@ -21,11 +21,16 @@ export const SORT_OPTIONS = {
 
 const SORT_VALUES: readonly string[] = Object.values(SORT_OPTIONS)
 
+/** Filtro de coordenadas: `with` = con coordenadas, `without` = sin ellas. */
+export const COORDINATE_FILTERS = ["with", "without"] as const
+export type CoordinateFilter = (typeof COORDINATE_FILTERS)[number]
+
 export interface IncidentFilters {
   q: string
   status: IncidentStatus | null
   priority: IncidentPriority | null
   type: string | null
+  coords: CoordinateFilter | null
   includeClosed: boolean
   sort: IncidentSort
   page: number
@@ -39,6 +44,7 @@ export function parseFilters(search: URLSearchParams): IncidentFilters {
     status: oneOf(STATUS_CODES, search.get("status")),
     priority: oneOf(PRIORITY_CODES, search.get("priority")),
     type: type !== undefined && type !== "" ? type : null,
+    coords: oneOf(COORDINATE_FILTERS, search.get("coords")),
     includeClosed: search.get("closed") === "1",
     sort: sort !== null && SORT_VALUES.includes(sort) ? (sort as IncidentSort) : "priority",
     page: pageFrom(search.get("page")),
@@ -52,6 +58,7 @@ export function serializeFilters(filters: IncidentFilters): URLSearchParams {
   if (filters.status) search.set("status", filters.status)
   if (filters.priority) search.set("priority", filters.priority)
   if (filters.type) search.set("type", filters.type)
+  if (filters.coords) search.set("coords", filters.coords)
   if (filters.includeClosed) search.set("closed", "1")
   if (filters.sort !== "priority") search.set("sort", filters.sort)
   if (filters.page > 1) search.set("page", String(filters.page))
@@ -64,6 +71,7 @@ export function hasActiveFilters(filters: IncidentFilters): boolean {
     filters.status !== null ||
     filters.priority !== null ||
     filters.type !== null ||
+    filters.coords !== null ||
     filters.includeClosed
   )
 }
@@ -74,6 +82,7 @@ export function toListParams(filters: IncidentFilters): IncidentListParams {
     status: filters.status ? [filters.status] : undefined,
     priority: filters.priority ? [filters.priority] : undefined,
     type: filters.type ?? undefined,
+    has_coordinates: filters.coords === null ? undefined : filters.coords === "with",
     // Un estado elegido explícitamente (p. ej. «Cerrado») se busca entre todos.
     active: !(filters.includeClosed || filters.status !== null),
     sort: filters.sort,

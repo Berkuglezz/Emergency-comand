@@ -28,6 +28,8 @@ import { IncidentStatusPill, IncidentTypeLabel } from "./incident-badges"
 import { IncidentForm } from "./incident-form"
 import { IncidentStatusActions } from "./incident-status-actions"
 import { IncidentTimeline } from "./incident-timeline"
+import { LocationMinimap } from "./location-minimap"
+import { CoordinatesText } from "./location-text"
 
 /** Detalle de un incidente: resumen, acciones, relación padre/hijos e historial. */
 export function IncidentDetailPage() {
@@ -239,6 +241,9 @@ function Summary({ incident, type }: { incident: IncidentDetail; type: IncidentT
         <DetailItem label={t("incidents.fields.locationDescription")}>
           {incident.location.description ?? "—"}
         </DetailItem>
+        <DetailItem label={t("incidents.fields.coordinates")}>
+          <CoordinatesText location={incident.location} />
+        </DetailItem>
         <DetailItem label={t("incidents.fields.affectedPeople")}>
           {incident.affected_people === null ? "—" : formatNumber(incident.affected_people)}
         </DetailItem>
@@ -270,6 +275,8 @@ function Summary({ incident, type }: { incident: IncidentDetail; type: IncidentT
           </DetailItem>
         )}
       </dl>
+
+      <LocationMinimap incident={incident} />
 
       {incident.description && (
         <div className="flex flex-col gap-1">

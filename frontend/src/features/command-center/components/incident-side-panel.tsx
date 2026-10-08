@@ -12,6 +12,7 @@ import {
   IncidentTypeLabel,
 } from "@/features/incidents/components/incident-badges"
 import { TimelineEntry } from "@/features/incidents/components/incident-timeline"
+import { CoordinatesText } from "@/features/incidents/components/location-text"
 import { useIncident, useIncidentEvents } from "@/features/incidents/hooks"
 import { incidentErrorMessage } from "@/features/incidents/presentation"
 import { formatNumber } from "@/lib/format"
@@ -102,6 +103,9 @@ function SelectedIncident({
           <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
             <DetailItem label={t("incidents.fields.municipality")}>
               {data.location.municipality}
+            </DetailItem>
+            <DetailItem label={t("incidents.fields.coordinates")}>
+              <CoordinatesText location={data.location} />
             </DetailItem>
             <DetailItem label={t("incidents.fields.affectedPeople")}>
               {data.affected_people === null ? "—" : formatNumber(data.affected_people)}

@@ -72,6 +72,8 @@ const KNOWN_ERRORS = [
   "invalid_details",
   "details_not_allowed",
   "field_not_nullable",
+  "coordinates_incomplete",
+  "location_out_of_area",
   "incident_type_not_found",
   "incident_not_found",
   "permission_denied",

@@ -1,5 +1,7 @@
 """Coherencia de los fixtures de demo, sin base de datos."""
 
+from app.domain.geo import DEMO_AREA
+from app.domain.incident_rules import ACTIVE_STATUSES
 from seeds.fixtures import INCIDENTS, ORGANIZATIONS, RESOURCES
 
 
@@ -36,3 +38,22 @@ def test_history_steps_are_ordered_and_never_in_the_future() -> None:
         for step in fixture.steps:
             # Cada paso es un cambio de estado o una nota, no ambos.
             assert (step.status is None) != (step.note is None), fixture.key
+
+
+def test_coordinates_are_approximate_and_inside_the_demo_area() -> None:
+    located = [f for f in INCIDENTS if f.coordinates is not None]
+    for fixture in located:
+        assert fixture.coordinates is not None
+        latitude, longitude = fixture.coordinates
+        # Como mucho 3 decimales (≈100 m): no señalan ningún portal concreto.
+        assert round(latitude, 3) == latitude and round(longitude, 3) == longitude, fixture.key
+        assert DEMO_AREA.contains(latitude, longitude), fixture.key
+    # Cada incidente en un punto distinto: ninguno queda oculto bajo otro.
+    assert len({f.coordinates for f in located}) == len(located)
+
+
+def test_some_active_incidents_have_no_coordinates_on_purpose() -> None:
+    # La demo debe mostrar el caso «sin coordenadas» en el mapa.
+    unlocated = [f for f in INCIDENTS if f.coordinates is None]
+    assert unlocated
+    assert all(f.status in ACTIVE_STATUSES for f in unlocated)

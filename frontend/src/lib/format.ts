@@ -46,3 +46,11 @@ export function formatShortDate(date: Date): string {
 export function formatDateTime(value: Date | string): string {
   return dateTimeFormat.format(typeof value === "string" ? new Date(value) : value)
 }
+
+/**
+ * Coordenadas WGS84 «latitud, longitud» con punto decimal, el formato que
+ * entienden los GIS (p. ej. «43.361412, -5.849389»). Se muestran con `font-data`.
+ */
+export function formatCoordinates(latitude: number, longitude: number): string {
+  return `${String(latitude)}, ${String(longitude)}`
+}

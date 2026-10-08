@@ -80,7 +80,22 @@
     "dataAt": "Datos de las {{time}}",
     "map": {
       "title": "Mapa",
-      "empty": "Todavía no hay capas que mostrar en el mapa."
+      "count_one": "{{formatted}} incidente en el mapa",
+      "count_other": "{{formatted}} incidentes en el mapa",
+      "simulatedData": "Datos simulados",
+      "truncated": "Se muestran solo los 1000 más urgentes",
+      "selectedUnlocated": "{{code}} no tiene coordenadas: no aparece en el mapa.",
+      "unlocated_one": "{{formatted}} incidente activo sin coordenadas.",
+      "unlocated_other": "{{formatted}} incidentes activos sin coordenadas.",
+      "viewUnlocated": "Ver en el listado",
+      "legend": {
+        "title": "Leyenda",
+        "priority": "Prioridad",
+        "status": "Estado",
+        "pending": "Sin intervenir",
+        "active": "En intervención",
+        "controlled": "Controlado"
+      }
     },
     "incidents": {
       "title": "Incidentes activos",
@@ -101,6 +116,27 @@
       "empty": "No hay recursos activos.",
       "viewAll": "Ver recursos",
       "viewStatus": "Ver recursos: {{status}}"
+    }
+  },
+  "map": {
+    "incidentsLabel": "Mapa de incidentes activos",
+    "fitIncidents": "Ajustar a incidentes",
+    "centerAsturias": "Centrar en Asturias",
+    "unsupportedTitle": "Mapa no disponible",
+    "unsupportedDescription": "Este navegador no puede mostrar el mapa (necesita WebGL2). La lista de incidentes funciona igual.",
+    "basemapErrorTitle": "Cartografía no disponible",
+    "basemapErrorDescription": "Las posiciones se muestran sin mapa base.",
+    "attribution": {
+      "openFreeMap": "OpenFreeMap",
+      "openMapTiles": "© OpenMapTiles",
+      "openStreetMap": "Datos © colaboradores de OpenStreetMap"
+    },
+    "controls": {
+      "canvas": "Lienzo del mapa",
+      "marker": "Marcador",
+      "zoomIn": "Acercar",
+      "zoomOut": "Alejar",
+      "resetBearing": "Orientar al norte"
     }
   },
   "organizations": {
@@ -145,7 +181,12 @@
       "includeClosed": "Incluir cerrados y cancelados",
       "sort": "Orden",
       "apply": "Buscar",
-      "clear": "Limpiar filtros"
+      "clear": "Limpiar filtros",
+      "coords": "Coordenadas",
+      "coordsValues": {
+        "with": "Con coordenadas",
+        "without": "Sin coordenadas"
+      }
     },
     "sort": {
       "priority": "Prioridad",
@@ -174,7 +215,10 @@
       "closedAt": "Finalizado",
       "risks": "Riesgos frecuentes",
       "suggestedResources": "Recursos sugeridos",
-      "selectType": "Selecciona un tipo"
+      "selectType": "Selecciona un tipo",
+      "coordinates": "Coordenadas",
+      "latitude": "Latitud",
+      "longitude": "Longitud"
     },
     "detail": {
       "summary": "Resumen",
@@ -222,7 +266,8 @@
       "noteAdded": "Nota",
       "parentSet": "Agrupado en {{to}}",
       "parentRemoved": "Separado de {{from}}",
-      "parentMoved": "Movido de {{from}} a {{to}}"
+      "parentMoved": "Movido de {{from}} a {{to}}",
+      "locationFromTo": "Antes: {{from}}\nAhora: {{to}}"
     },
     "notes": {
       "label": "Nota",
@@ -247,7 +292,11 @@
       "numberRange": "Introduce un valor entre {{min}} y {{max}}.",
       "decimalNumber": "Introduce un número con dos decimales como máximo.",
       "noteRequired": "Escribe la nota.",
-      "noteTooLong": "La nota admite como máximo 2000 caracteres."
+      "noteTooLong": "La nota admite como máximo 2000 caracteres.",
+      "latitudeInvalid": "Latitud no válida: número decimal entre -90 y 90.",
+      "longitudeInvalid": "Longitud no válida: número decimal entre -180 y 180.",
+      "coordinatesIncomplete": "Indica latitud y longitud, o deja ambas vacías.",
+      "outOfArea": "La posición está fuera del área de la demo (Asturias). ¿Están intercambiadas la latitud y la longitud?"
     },
     "errors": {
       "version_conflict": "Otra persona ha modificado el incidente. Recarga para ver la versión actual.",
@@ -262,7 +311,24 @@
       "permission_denied": "Tu rol no tiene permiso para esta acción.",
       "validation_error": "Hay datos no válidos en el formulario.",
       "network_error": "No se puede contactar con el servidor. Comprueba la conexión.",
-      "unexpected": "Se ha producido un error inesperado. Inténtalo de nuevo."
+      "unexpected": "Se ha producido un error inesperado. Inténtalo de nuevo.",
+      "coordinates_incomplete": "Indica latitud y longitud, o deja ambas vacías.",
+      "location_out_of_area": "La posición está fuera del área de la demo (Asturias)."
+    },
+    "location": {
+      "noCoordinates": "Sin coordenadas",
+      "noCoordinatesHint": "Se pueden añadir al editar el incidente.",
+      "mapLabel": "Mapa de la ubicación de {{code}}",
+      "coordinatesHint": "Opcional. Grados decimales WGS84 (latitud y longitud), dentro de Asturias.",
+      "latitudePlaceholder": "43.3614",
+      "longitudePlaceholder": "-5.8494",
+      "pick": "Elegir en el mapa",
+      "clear": "Quitar coordenadas",
+      "pickTitle": "Elegir la posición",
+      "pickDescription": "Haz clic en el mapa o arrastra el punto y confirma la posición.",
+      "pickMapLabel": "Mapa para elegir la posición",
+      "pickNone": "Todavía no hay ninguna posición elegida.",
+      "pickConfirm": "Usar esta posición"
     }
   },
   "incidentStatus": {
@@ -497,7 +563,10 @@
       "reload": "Recargar"
     },
     "simulated": "Simulado",
-    "simulatedHint": "Dato simulado de demostración"
+    "simulatedHint": "Dato simulado de demostración",
+    "marker": {
+      "priority": "prioridad {{priority}}"
+    }
   },
   "errors": {
     "notFound": {
@@ -530,6 +599,7 @@
       "alerts": "Alertas",
       "table": "Tabla",
       "priorityBadge": "PriorityBadge",
+      "incidentMarker": "IncidentMarker",
       "statusPill": "StatusPill",
       "kpiTile": "KpiTile",
       "panel": "Panel",
@@ -626,6 +696,7 @@
       "destructiveTitle": "¿Eliminar el elemento?",
       "destructiveDescription": "Esta acción es irreversible.",
       "destructiveConfirm": "Eliminar"
-    }
+    },
+    "markerTitle": "Incidente de ejemplo"
   }
 }

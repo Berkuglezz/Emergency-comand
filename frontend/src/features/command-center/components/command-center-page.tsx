@@ -1,23 +1,23 @@
 import { useQueryClient } from "@tanstack/react-query"
-import { Map as MapIcon, RotateCw } from "lucide-react"
+import { RotateCw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useSearchParams } from "react-router"
 
 import { KpiTile, type KpiTileState } from "@/components/ops/kpi-tile"
-import { Panel } from "@/components/ops/panel"
 import { Button } from "@/components/ui/button"
 import { formatTime } from "@/lib/format"
 import { queryKeys } from "@/lib/query-keys"
 
 import { useDashboardSummary } from "../hooks"
 import { ActiveIncidentsPanel } from "./active-incidents-panel"
+import { IncidentMapPanel } from "./incident-map-panel"
 import { IncidentSidePanel } from "./incident-side-panel"
 import { ResourcesSummaryPanel } from "./resources-summary-panel"
 
 /**
- * Centro de mando con datos reales: KPIs, incidentes activos, incidente
- * seleccionado y resumen de recursos. El mapa sigue reservado (fase posterior).
- * La selección y los filtros viven en la URL (`/?incident=…&priority=…`).
+ * Centro de mando con datos reales: KPIs, mapa, incidentes activos, incidente
+ * seleccionado y resumen de recursos. La selección y los filtros viven en la
+ * URL (`/?incident=…&priority=…`) y los comparten el mapa, la lista y el panel.
  */
 export function CommandCenterPage() {
   const { t } = useTranslation()
@@ -103,16 +103,16 @@ export function CommandCenterPage() {
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
         <div className="flex min-h-0 min-w-0 flex-col gap-3">
-          <Panel
-            title={t("commandCenter.map.title")}
-            status="empty"
-            empty={{ icon: MapIcon, description: t("commandCenter.map.empty") }}
-            className="min-h-48 lg:h-60 lg:shrink-0"
+          {/* El mapa ocupa ~55 % de la columna en escritorio; la lista, el resto. */}
+          <IncidentMapPanel
+            selectedId={selectedId}
+            onSelect={select}
+            className="h-[26rem] shrink-0 lg:h-auto lg:min-h-80 lg:flex-[11_1_0%]"
           />
           <ActiveIncidentsPanel
             selectedId={selectedId}
             onSelect={select}
-            className="min-h-80 flex-1"
+            className="min-h-80 flex-1 lg:min-h-48 lg:flex-[9_1_0%]"
           />
         </div>
         <div className="flex min-h-0 min-w-0 flex-col gap-3">

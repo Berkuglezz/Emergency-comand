@@ -3,6 +3,7 @@ import { type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ConfirmDialog } from "@/components/ops/confirm-dialog"
+import { IncidentMarker } from "@/components/ops/incident-marker"
 import { KpiTile } from "@/components/ops/kpi-tile"
 import { Panel } from "@/components/ops/panel"
 import { PRIORITY_CODES } from "@/components/ops/priority"
@@ -35,6 +36,7 @@ import { cn } from "@/lib/utils"
 import {
   DATA_SAMPLES,
   KPI_SAMPLES,
+  MARKER_SAMPLES,
   RADII,
   SURFACE_TOKENS,
   TABLE_ROWS,
@@ -301,6 +303,32 @@ export function DesignSystemPage() {
             <PriorityBadge key={priority} priority={priority} />
           ))}
           <PriorityBadge priority="critical" pulse />
+        </Row>
+      </Section>
+
+      <Section title={t("designSystem.sections.incidentMarker")}>
+        {/* Margen superior: el tooltip aparece encima al pasar el ratón o con el foco. */}
+        <Row>
+          <div className="flex flex-wrap items-center gap-3 pt-10">
+            {MARKER_SAMPLES.map((sample) => (
+              <IncidentMarker
+                key={sample.code}
+                code={sample.code}
+                title={t("designSystem.markerTitle")}
+                priority={sample.priority}
+                status={sample.status}
+                isSimulated
+              />
+            ))}
+            <IncidentMarker
+              code="INC-0040"
+              title={t("designSystem.markerTitle")}
+              priority="high"
+              status="assessing"
+              isSimulated={false}
+              selected
+            />
+          </div>
         </Row>
       </Section>
 

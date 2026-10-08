@@ -7,7 +7,11 @@ un servicio real:
 - emails del dominio reservado `.test` (RFC 2606), que no puede existir;
 - recursos con código `SIM-…` y "(simulado)" en el nombre;
 - incidentes con "(simulado)" en el título y ubicaciones genéricas a nivel de
-  municipio, sin direcciones, teléfonos ni indicativos reales.
+  municipio, sin direcciones, teléfonos ni indicativos reales;
+- coordenadas aproximadas (3 decimales, ≈100 m) en zonas genéricas del
+  municipio, nunca sobre instalaciones de emergencias (hospitales, parques de
+  bomberos, comisarías). Algunos incidentes no tienen coordenadas a propósito,
+  para mostrar ese caso en la demo.
 
 Las horas de recursos e incidentes son relativas al momento de ejecutar el seed.
 """
@@ -181,6 +185,8 @@ class DemoIncident:
     priority: IncidentPriority
     municipality: str
     location_description: str
+    # (latitud, longitud) aproximadas; None = sin coordenadas a propósito.
+    coordinates: tuple[float, float] | None
     # Minutos entre la notificación y la ejecución del seed.
     reported_minutes_ago: int
     steps: tuple[DemoStep, ...] = ()
@@ -210,6 +216,7 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.HIGH,
         municipality="Avilés",
         location_description="Polígono industrial (ubicación simulada)",
+        coordinates=(43.574, -5.912),
         reported_minutes_ago=1620,
         affected_people=0,
         steps=(
@@ -227,6 +234,7 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.LOW,
         municipality="Gijón",
         location_description="Vía de circunvalación (ubicación simulada)",
+        coordinates=(43.522, -5.677),
         reported_minutes_ago=610,
         affected_people=0,
         steps=(
@@ -244,6 +252,8 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.HIGH,
         municipality="Oviedo",
         location_description="Zona central de Asturias (ubicación simulada)",
+        # Episodio que afecta a una zona amplia: no tiene un único punto.
+        coordinates=None,
         reported_minutes_ago=300,
         description="Episodio de viento y lluvia intensa que agrupa varios avisos (simulado).",
         steps=(
@@ -259,6 +269,7 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.HIGH,
         municipality="Gijón",
         location_description="Zona baja junto al cauce (ubicación simulada)",
+        coordinates=(43.535, -5.637),
         reported_minutes_ago=240,
         affected_people=12,
         details={"water_level_cm": 60},
@@ -276,6 +287,7 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.MEDIUM,
         municipality="Mieres",
         location_description="Carretera local de montaña (ubicación simulada)",
+        coordinates=(43.237, -5.745),
         reported_minutes_ago=200,
         parent_key="storm-central",
         steps=(DemoStep(15, _ST.ASSESSING),),
@@ -288,6 +300,7 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.MEDIUM,
         municipality="Aller",
         location_description="Ruta de montaña señalizada (ubicación simulada)",
+        coordinates=(43.088, -5.59),
         reported_minutes_ago=150,
         affected_people=1,
         steps=(
@@ -303,6 +316,7 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.CRITICAL,
         municipality="Siero",
         location_description="Zona forestal (ubicación simulada)",
+        coordinates=(43.36, -5.61),
         reported_minutes_ago=95,
         details={"affected_hectares": "12.50", "vegetation": "forest"},
         steps=(
@@ -318,6 +332,7 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.MEDIUM,
         municipality="Oviedo",
         location_description="Vía pública (ubicación simulada)",
+        coordinates=(43.361, -5.844),
         reported_minutes_ago=70,
         steps=(DemoStep(6, _ST.CANCELLED, reason="Aviso duplicado (simulado)"),),
     ),
@@ -328,6 +343,7 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.LOW,
         municipality="Gijón",
         location_description="Zona costera (ubicación simulada)",
+        coordinates=(43.56, -5.668),
         reported_minutes_ago=45,
         affected_people=0,
         steps=(DemoStep(8, _ST.ASSESSING), DemoStep(20, _ST.IN_PROGRESS)),
@@ -339,6 +355,7 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.CRITICAL,
         municipality="Avilés",
         location_description="Nave en zona industrial (ubicación simulada)",
+        coordinates=(43.548, -5.895),
         reported_minutes_ago=25,
         affected_people=3,
         steps=(DemoStep(4, _ST.ASSESSING),),
@@ -350,6 +367,7 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.HIGH,
         municipality="Oviedo",
         location_description="Vía de acceso a la ciudad (ubicación simulada)",
+        coordinates=(43.372, -5.815),
         reported_minutes_ago=8,
         affected_people=4,
     ),
@@ -360,6 +378,8 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         priority=_PR.HIGH,
         municipality="Gijón",
         location_description="Paseo marítimo (ubicación simulada)",
+        # Aviso recién recibido: la posición aún no está confirmada.
+        coordinates=None,
         reported_minutes_ago=3,
         affected_people=1,
     ),

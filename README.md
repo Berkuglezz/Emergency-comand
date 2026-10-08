@@ -4,15 +4,16 @@ Prototipo demostrable de una plataforma de coordinación de emergencias: un cent
 
 > **⚠️ Prototipo de demostración.** Emergency Command **no es un sistema real de emergencias** y **no está conectado** al 112, a servicios públicos ni a ninguna fuente real de datos. Todas las organizaciones, usuarios, recursos e incidentes que incluye son **ficticios y están marcados como simulados**.
 
-**Estado actual: Fase 2.** Funciona:
+**Estado actual: Fase 3.** Funciona:
 
 - autenticación y control de acceso por rol (RBAC);
 - **incidentes:** alta, edición, ciclo de vida con cambios de estado validados, incidente padre, historial (timeline) y notas;
 - **recursos:** alta, edición, estado operativo y desactivación;
-- **centro de mando** con datos reales: indicadores, incidentes activos, incidente seleccionado y resumen de recursos;
+- **centro de mando** con datos reales: indicadores, **mapa** de incidentes activos, incidentes activos, incidente seleccionado y resumen de recursos;
+- **ubicaciones con PostGIS:** coordenadas validadas en cada incidente, minimapa en la ficha y selección de la posición en el mapa al dar de alta o editar;
 - datos simulados de Asturias para la demo.
 
-Todavía **no** hay mapa, uso geográfico de PostGIS, asignación de recursos, ETA, tiempo real (WebSockets), simulador, IA ni hospitales: la zona del mapa está reservada y el resto llega en fases posteriores. La lista completa de lo implementado y lo pendiente está en [`docs/architecture.md`](docs/architecture.md#15-implementado-y-pendiente).
+Todavía **no** hay asignación de recursos, posiciones de recursos, rutas, ETA, tiempo real (WebSockets), simulador, IA ni hospitales: llegan en fases posteriores. La lista completa de lo implementado y lo pendiente está en [`docs/architecture.md`](docs/architecture.md#15-implementado-y-pendiente).
 
 ---
 
@@ -137,9 +138,20 @@ Todos los datos demo viven en `backend/seeds/`, son ficticios y la interfaz los 
 - **3 usuarios**, uno por rol, con emails del dominio reservado `.test`, que no puede existir en internet;
 - **18 recursos** con código `SIM-…` (bomberos, sanitarios, protección civil y apoyo logístico);
 - **12 incidentes** en Oviedo, Gijón, Avilés y municipios cercanos, con todas las prioridades y estados, incluidos un temporal con dos incidentes agrupados, dos cerrados y uno cancelado, cada uno con su historial;
-- ubicaciones genéricas a nivel de municipio («Zona forestal (ubicación simulada)»): ningún teléfono, dirección, URL ni nombre corresponde a un servicio real.
+- ubicaciones genéricas a nivel de municipio («Zona forestal (ubicación simulada)»): ningún teléfono, dirección, URL ni nombre corresponde a un servicio real;
+- coordenadas aproximadas (3 decimales, ≈100 m) en zonas genéricas de cada municipio, nunca sobre instalaciones de emergencias. Dos incidentes activos **no tienen coordenadas a propósito** (un temporal que afecta a una zona amplia y un aviso recién recibido), para mostrar ese caso.
 
 Las horas de los incidentes son relativas al momento en que se cargó el seed.
+
+### Mapa
+
+El mapa usa **MapLibre GL JS** con el estilo `dark` de **[OpenFreeMap](https://openfreemap.org)**, gratuito y sin clave:
+
+- **Necesita conexión a internet** para la cartografía. Sin ella, el mapa avisa y sigue mostrando las posiciones de los incidentes.
+- **Privacidad:** al proveedor solo se le piden el estilo y las teselas; las coordenadas y los datos de los incidentes nunca salen de la aplicación.
+- **Atribución** (© OpenMapTiles, datos © colaboradores de OpenStreetMap): siempre visible en la esquina del mapa.
+- Para usar otro estilo, define `VITE_MAP_STYLE_URL` (ver [Variables de entorno](#variables-de-entorno)).
+- Las coordenadas de los incidentes deben estar en **Asturias** (área de la demo): una posición fuera, o con latitud y longitud intercambiadas, se rechaza.
 
 ---
 
@@ -202,13 +214,14 @@ Vite redirige `/api` al backend (`http://localhost:8000` por defecto; se cambia 
 
 - **Migraciones:**
   - la inicial habilita la extensión PostGIS y crea `roles`, `organizations`, `users` y `refresh_tokens`;
-  - la de la Fase 2 crea los catálogos de tipos de incidente y de recurso, `incidents`, `incident_events` (historial de solo inserción) y `resources`.
-  - Todavía no hay ninguna columna ni consulta geográfica (llegan en la Fase 3).
+  - la de la Fase 2 crea los catálogos de tipos de incidente y de recurso, `incidents`, `incident_events` (historial de solo inserción) y `resources`;
+  - las de la Fase 3 crean `locations` (`geometry(Point, 4326)` con índice GiST), trasladan a ella la ubicación de cada incidente y añaden el evento `location_changed`.
 - Los roles y los catálogos de tipos se crean en las migraciones, no en el seed, porque el sistema los necesita en cualquier entorno.
 - El seed es idempotente y fuera de `development` se niega a ejecutarse:
   - **usuarios y organizaciones:** crea lo que falta y restaura los datos demo modificados;
   - **recursos e incidentes:** solo crea lo que falta y **nunca modifica lo existente**, así que los cambios que hagas durante una demo se conservan aunque se vuelva a ejecutar.
 - **Volver a los datos de demostración iniciales:** `docker compose down -v` borra la base de datos (⚠️ también cualquier dato que hayas creado); el siguiente `docker compose up` la recrea, migra y carga el seed desde cero.
+- **Base de datos creada antes de la Fase 3:** las migraciones añaden la tabla de ubicaciones, pero los incidentes que ya existían se quedan **sin coordenadas**, porque el seed no modifica lo existente. Para tener los datos demo con coordenadas, reinicia la base de datos con `docker compose down -v` y vuelve a arrancar con `docker compose up --build`.
 
 ---
 
@@ -274,6 +287,7 @@ Todas están documentadas en [`.env.example`](.env.example). Resumen:
 | `REFRESH_COOKIE_SECURE` | Atributo `Secure` de la cookie de refresh. `false` solo en desarrollo sobre http. |
 | `CORS_ORIGINS` | Lista JSON de orígenes permitidos. Nunca `*`. |
 | `DEMO_USER_PASSWORD` | Contraseña de los usuarios demo (mínimo 12 caracteres). |
+| `VITE_MAP_STYLE_URL` | Estilo del mapa base (frontend). Vacío = OpenFreeMap `dark`. Sin Docker, defínela en el entorno o en `frontend/.env.local`. |
 
 `.env` está en `.gitignore`: **nunca lo subas al repositorio**. Con `ENVIRONMENT=production`, el backend se niega a arrancar si `JWT_SECRET_KEY` o `POSTGRES_PASSWORD` conservan los valores de ejemplo, o si `REFRESH_COOKIE_SECURE` es `false`.
 
@@ -288,13 +302,13 @@ emergency-command/
 │  └─ architecture.md    arquitectura y decisiones
 ├─ backend/              FastAPI + SQLAlchemy async + Alembic (uv)
 │  ├─ app/               api/v1 · services · repositories · models · schemas · domain · core · db
-│  ├─ alembic/           migraciones (Fase 1 y Fase 2)
+│  ├─ alembic/           migraciones (Fases 1, 2 y 3)
 │  ├─ seeds/             datos de demostración (solo development)
 │  └─ tests/             unit/ · integration/
 └─ frontend/             React + Vite + TypeScript (pnpm)
    ├─ scripts/gen-api.mjs
    └─ src/               app · components/{ui,ops} · features/{auth,command-center,incidents,
-                         resources,organizations,system} · lib · i18n · styles · types
+                         map,resources,organizations,system} · lib · i18n · styles · types
 ```
 
 Detalle en [`docs/architecture.md`](docs/architecture.md).
@@ -310,4 +324,7 @@ Detalle en [`docs/architecture.md`](docs/architecture.md).
 - **El login con los usuarios demo falla.** Comprueba que usas la contraseña de `DEMO_USER_PASSWORD` de tu `.env` y que el seed se ha ejecutado (`ENVIRONMENT=development`).
 - **`uv` no se encuentra tras instalarlo.** Abre una terminal nueva para que se recargue el `PATH`.
 - **Un cambio aparece como «El incidente ha cambiado» / «El recurso ha cambiado».** Otra persona (u otra pestaña) lo modificó mientras lo tenías abierto. Pulsa «Recargar» para ver la versión actual y vuelve a aplicar tu cambio.
+- **El mapa aparece sin cartografía («Cartografía no disponible»).** El navegador no llega a `tiles.openfreemap.org` (sin conexión, proxy o cortafuegos). Las posiciones de los incidentes se siguen mostrando; la cartografía vuelve al recargar cuando haya conexión.
+- **El mapa dice «Mapa no disponible».** El navegador no tiene WebGL2 (por ejemplo, con la aceleración por hardware desactivada). El resto del centro de mando funciona igual.
+- **Los incidentes del seed no tienen coordenadas.** La base de datos se creó antes de la Fase 3: reiníciala con `docker compose down -v` (ver [Base de datos](#base-de-datos-migraciones-y-datos-demo)).
 - **Los indicadores del centro de mando no se actualizan solos.** Es intencionado: todavía no hay tiempo real. Se refrescan tras cada cambio o con «Actualizar», y muestran la hora de los datos.

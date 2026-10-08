@@ -20,7 +20,7 @@ Emergency Command es un **prototipo demostrable** de plataforma de coordinación
 |---|---|
 | Fase 1: base técnica | **Completada** (ver §2.1 y §11.1) |
 | Fase 2: incidentes, recursos y dashboard funcional | **Completada** (ver §2.3 y §11.2) |
-| Fase 3: geolocalización (PostGIS + `Location`) y mapa funcional | **En curso** (alcance aprobado en §2.6; fuera de alcance en §2.7) |
+| Fase 3: geolocalización (PostGIS + `Location`) y mapa funcional | **Implementada, pendiente de confirmación del cierre** (alcance en §2.6; fuera de alcance en §2.7) |
 
 Trabaja **solo** en el alcance de la fase autorizada. Todo lo demás está fuera de alcance aunque parezca útil o rápido de añadir.
 
@@ -133,7 +133,7 @@ Si una tarea de Fase 2 parece requerir algo de esta lista, **pregunta antes**.
   - Filtros de un solo valor en la interfaz para estado y prioridad (la API ya admite varios).
   - Prueba de extremo a extremo manual, fuera del repositorio.
 
-### 2.6 Fase 3: geolocalización y mapa funcional (en curso)
+### 2.6 Fase 3: geolocalización y mapa funcional (implementada, pendiente de cierre)
 
 Propuesta técnica aprobada el 2026-10-08. Se implementa por etapas, y cada una se verifica, se resume y espera aprobación:
 
@@ -162,7 +162,7 @@ Propuesta técnica aprobada el 2026-10-08. Se implementa por etapas, y cada una 
 **Frontend**
 - `maplibre-gl` directo (sin `react-map-gl`), carga diferida, estilo OpenFreeMap `dark` configurable con `VITE_MAP_STYLE_URL`, atribución siempre visible, fallback sin mapa base.
 - El mapa ocupa ~55 % de la zona principal del centro de mando; la lista va debajo.
-- Marcadores DOM accesibles: color + icono + código por prioridad; borde por estado; simulado siempre indicado. Sin popup en el centro de mando (el detalle está en el panel lateral).
+- Marcadores DOM accesibles y compactos: color + icono por prioridad, borde por estado; el código se muestra al seleccionar y en el tooltip, y el nombre accesible incluye código, prioridad, estado y simulado (cambio tras la revisión visual: con el código siempre visible se solapaban a escala regional). Sin popup en el centro de mando (el detalle está en el panel lateral).
 - Selección y filtros en la URL, compartidos por mapa, lista y panel. Incidentes sin coordenadas: aviso con recuento y filtro, nunca ocultos.
 
 **Datos y seguridad**

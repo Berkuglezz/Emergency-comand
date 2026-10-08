@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import { Panel, type PanelStatus } from "@/components/ops/panel"
 import { PRIORITY_CODES } from "@/components/ops/priority"
-import { formatDateTime } from "@/lib/format"
+import { formatCoordinates, formatDateTime } from "@/lib/format"
 import { type CodeGroup, useCodeLabel } from "@/lib/code-label"
 import { cn } from "@/lib/utils"
 
@@ -82,6 +82,23 @@ export function TimelineEntry({ event }: { event: IncidentEvent }) {
 
 // --- Texto de cada entrada --------------------------------------------------------
 
+/** «Municipio · descripción · lat, lon» de un `location_changed` (antes o después). */
+function describeLocation(value: unknown, t: TFunction): string {
+  if (typeof value !== "object" || value === null) return "—"
+  const location = value as Record<string, unknown>
+  const latitude = location.latitude
+  const longitude = location.longitude
+  return [
+    text(location.municipality) ?? "—",
+    text(location.description),
+    typeof latitude === "number" && typeof longitude === "number"
+      ? formatCoordinates(latitude, longitude)
+      : t("incidents.location.noCoordinates"),
+  ]
+    .filter(Boolean)
+    .join(" · ")
+}
+
 function text(value: unknown): string | null {
   return typeof value === "string" && value ? value : null
 }
@@ -150,11 +167,13 @@ function describeEvent(
         text: t("incidents.timeline.updated", { fields: fields("incidentFields") }),
         detail: null,
       }
-    // Solo qué cambió; el antes/después de la ubicación se mostrará en la Fase 3.6.
     case "location_changed":
       return {
         text: t("incidents.timeline.locationChanged", { fields: fields("locationFields") }),
-        detail: null,
+        detail: t("incidents.timeline.locationFromTo", {
+          from: describeLocation(payload.from, t),
+          to: describeLocation(payload.to, t),
+        }),
       }
     case "note_added":
       return { text: t("incidents.timeline.noteAdded"), detail: text(payload.text) }

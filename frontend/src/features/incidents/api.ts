@@ -6,6 +6,8 @@ import type {
   IncidentDetail,
   IncidentEvent,
   IncidentListParams,
+  IncidentMapCollection,
+  IncidentMapParams,
   IncidentNoteCreate,
   IncidentPage,
   IncidentStatusChange,
@@ -22,6 +24,14 @@ export function fetchIncidents(
   signal?: AbortSignal
 ): Promise<IncidentPage> {
   return apiRequest<IncidentPage>(`/incidents${toQueryString(params)}`, { signal })
+}
+
+/** Incidentes con coordenadas (GeoJSON) para el mapa. No sustituye al listado. */
+export function fetchIncidentMap(
+  params: IncidentMapParams,
+  signal?: AbortSignal
+): Promise<IncidentMapCollection> {
+  return apiRequest<IncidentMapCollection>(`/incidents/map${toQueryString(params)}`, { signal })
 }
 
 export function fetchIncident(id: string, signal?: AbortSignal): Promise<IncidentDetail> {
