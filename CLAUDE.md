@@ -20,7 +20,7 @@ Emergency Command es un **prototipo demostrable** de plataforma de coordinación
 |---|---|
 | Fase 1: base técnica | **Completada** (ver §2.1 y §11.1) |
 | Fase 2: incidentes, recursos y dashboard funcional | **Completada** (ver §2.3 y §11.2) |
-| Fase 3: geolocalización (PostGIS + `Location`) y mapa funcional | **Implementada, pendiente de confirmación del cierre** (alcance en §2.6; fuera de alcance en §2.7) |
+| Fase 3: geolocalización (PostGIS + `Location`) y mapa funcional | **Completada** (ver §2.6 y §11.3) |
 
 Trabaja **solo** en el alcance de la fase autorizada. Todo lo demás está fuera de alcance aunque parezca útil o rápido de añadir.
 
@@ -133,9 +133,9 @@ Si una tarea de Fase 2 parece requerir algo de esta lista, **pregunta antes**.
   - Filtros de un solo valor en la interfaz para estado y prioridad (la API ya admite varios).
   - Prueba de extremo a extremo manual, fuera del repositorio.
 
-### 2.6 Fase 3: geolocalización y mapa funcional (implementada, pendiente de cierre)
+### 2.6 Fase 3: geolocalización y mapa funcional (completada)
 
-Propuesta técnica aprobada el 2026-10-08. Se implementa por etapas, y cada una se verifica, se resume y espera aprobación:
+Propuesta técnica aprobada y fase cerrada el 2026-10-08. Se implementó por etapas:
 
 | Etapa | Contenido |
 |---|---|
@@ -469,6 +469,27 @@ La Fase 2 se considera terminada cuando (todos cumplidos y verificados al cierre
 - [x] Tests (283 backend, 75 frontend), `ruff`, `mypy`, ESLint, type-check y build pasan; verificado desde un clon limpio.
 - [x] README y `docs/architecture.md` actualizados, separando lo implementado de lo preparado.
 - [x] Ninguna dependencia nueva durante la fase.
+
+### 11.3 Fase 3
+
+La Fase 3 se considera terminada cuando (todos cumplidos y verificados al cierre, 2026-10-08):
+
+- [x] `Location` 1:1 con `Incident` (`location_id NOT NULL UNIQUE`), sin abstracciones para otras entidades.
+- [x] `locations.geom` es `geometry(Point, 4326)` nullable con índice GiST, y es la única columna geográfica (test de metadatos).
+- [x] La migración traslada la ubicación textual existente sin tocar `version`, `updated_at` ni el historial; el `downgrade` está probado con datos.
+- [x] La API usa `location` anidada con coordenadas WGS84 validadas (rangos, ambas o ninguna, sin `NaN`, 6 decimales, área de Asturias) y códigos de error propios.
+- [x] Cambiar la ubicación incrementa `version` una vez y registra `location_changed` con el antes y el después; una edición sin cambios no escribe nada.
+- [x] `GET /incidents/map` devuelve GeoJSON con filtros, `bbox` sobre el índice GiST, `unlocated_total` y `truncated`, y no sustituye a `GET /incidents`.
+- [x] Las coordenadas nunca aparecen en logs, excepciones ni respuestas de error de validación (tests).
+- [x] Seed con coordenadas simuladas aproximadas, incidentes sin coordenadas a propósito, idempotente y validado con las reglas de la API.
+- [x] Mapa funcional (MapLibre + OpenFreeMap `dark`) en el centro de mando, con carga diferida, atribución siempre visible y avisos si falla el mapa base o no hay WebGL2.
+- [x] Marcadores compactos accesibles: color + icono de prioridad, borde de estado, código al seleccionar y en el tooltip, nombre accesible completo y simulado indicado.
+- [x] Mapa ↔ lista ↔ panel por URL, filtros compartidos, centrado que respeta `prefers-reduced-motion` e incidentes sin coordenadas indicados y filtrables.
+- [x] Coordenadas en el formulario con «Elegir en el mapa», minimapa en la ficha y `location_changed` en el historial.
+- [x] Ningún elemento de §2.7 implementado.
+- [x] Tests (352 backend, 95 frontend), `ruff`, `mypy`, `alembic check`, ESLint, type-check y build pasan; verificado desde un clon limpio.
+- [x] README y `docs/architecture.md` actualizados.
+- [x] Solo las dependencias aprobadas: `geoalchemy2` 0.20.0 y `maplibre-gl` 6.13.0.
 
 ---
 
