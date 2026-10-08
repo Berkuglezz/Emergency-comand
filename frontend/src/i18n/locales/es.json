@@ -1,0 +1,625 @@
+{
+  "common": {
+    "close": "Cerrar",
+    "cancel": "Cancelar",
+    "retry": "Reintentar",
+    "loading": "Cargando…",
+    "noData": "Sin datos",
+    "processing": "Procesando…",
+    "system": "Sistema",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "edit": "Editar",
+    "back": "Volver",
+    "refresh": "Actualizar"
+  },
+  "app": {
+    "name": "Emergency Command",
+    "demoNotice": "Prototipo de demostración. No es un sistema real de emergencias."
+  },
+  "auth": {
+    "restoring": "Comprobando la sesión…",
+    "sessionCheckFailed": {
+      "title": "No se puede contactar con el servidor",
+      "description": "No se ha podido comprobar la sesión. Revisa la conexión e inténtalo de nuevo."
+    },
+    "login": {
+      "subtitle": "Inicia sesión para acceder al centro de mando.",
+      "email": "Correo electrónico",
+      "password": "Contraseña",
+      "submit": "Iniciar sesión",
+      "submitting": "Iniciando sesión…",
+      "failed": "No se ha podido iniciar sesión"
+    },
+    "validation": {
+      "emailRequired": "Introduce tu correo electrónico.",
+      "emailInvalid": "Introduce un correo electrónico válido.",
+      "passwordRequired": "Introduce tu contraseña.",
+      "passwordTooLong": "La contraseña es demasiado larga."
+    },
+    "errors": {
+      "invalidCredentials": "Correo o contraseña incorrectos.",
+      "network": "No se puede contactar con el servidor. Comprueba la conexión.",
+      "unexpected": "Se ha producido un error inesperado. Inténtalo de nuevo."
+    },
+    "logout": "Cerrar sesión",
+    "loggingOut": "Cerrando sesión…"
+  },
+  "roles": {
+    "admin": "Administración",
+    "coordinator": "Coordinación",
+    "operator": "Operación"
+  },
+  "nav": {
+    "label": "Navegación principal",
+    "commandCenter": "Centro de mando",
+    "organizations": "Organizaciones",
+    "incidents": "Incidentes",
+    "resources": "Recursos"
+  },
+  "topBar": {
+    "timeZone": "Hora de Madrid",
+    "connection": {
+      "checking": "Comprobando conexión",
+      "online": "Conectado",
+      "degraded": "Servicio degradado",
+      "offline": "Sin conexión"
+    }
+  },
+  "commandCenter": {
+    "title": "Centro de mando",
+    "kpis": {
+      "label": "Indicadores",
+      "activeIncidents": "Incidentes activos",
+      "critical": "Críticos activos",
+      "reported24h": "Notificados (24 h)",
+      "affectedPeople": "Personas afectadas",
+      "available": "Recursos disponibles",
+      "inService": "Recursos en servicio"
+    },
+    "dataAt": "Datos de las {{time}}",
+    "map": {
+      "title": "Mapa",
+      "empty": "Todavía no hay capas que mostrar en el mapa."
+    },
+    "incidents": {
+      "title": "Incidentes activos",
+      "empty": "No hay incidentes activos.",
+      "emptyFiltered": "Ningún incidente activo coincide con los filtros.",
+      "viewAll": "Ver todos",
+      "select": "Ver {{code}} en el panel lateral"
+    },
+    "detail": {
+      "title": "Incidente seleccionado",
+      "empty": "Selecciona un incidente de la lista para ver su resumen.",
+      "lastEvents": "Últimos eventos",
+      "open": "Abrir ficha completa",
+      "close": "Cerrar panel"
+    },
+    "resources": {
+      "title": "Recursos",
+      "empty": "No hay recursos activos.",
+      "viewAll": "Ver recursos",
+      "viewStatus": "Ver recursos: {{status}}"
+    }
+  },
+  "organizations": {
+    "title": "Organizaciones",
+    "description": "Organizaciones registradas en el sistema.",
+    "empty": "No hay organizaciones registradas.",
+    "columns": {
+      "name": "Nombre",
+      "code": "Código",
+      "status": "Estado"
+    },
+    "active": "Activa",
+    "inactive": "Inactiva",
+    "simulated": "Simulada"
+  },
+  "incidents": {
+    "title": "Incidentes",
+    "description": "Incidentes registrados, ordenados por prioridad.",
+    "new": "Nuevo incidente",
+    "list": {
+      "empty": "No hay incidentes activos.",
+      "emptyFiltered": "Ningún incidente coincide con los filtros.",
+      "columns": {
+        "code": "Código",
+        "priority": "Prioridad",
+        "status": "Estado",
+        "title": "Título",
+        "type": "Tipo",
+        "municipality": "Municipio",
+        "reportedAt": "Notificado"
+      },
+      "range": "{{from}}–{{to}} de {{total}}",
+      "child": "Agrupado en otro incidente"
+    },
+    "filters": {
+      "label": "Filtros",
+      "search": "Buscar",
+      "searchPlaceholder": "Código o título",
+      "status": "Estado",
+      "priority": "Prioridad",
+      "type": "Tipo",
+      "includeClosed": "Incluir cerrados y cancelados",
+      "sort": "Orden",
+      "apply": "Buscar",
+      "clear": "Limpiar filtros"
+    },
+    "sort": {
+      "priority": "Prioridad",
+      "reportedDesc": "Más recientes",
+      "reportedAsc": "Más antiguos",
+      "updatedDesc": "Última actualización"
+    },
+    "fields": {
+      "type": "Tipo de incidente",
+      "category": "Categoría",
+      "title": "Título",
+      "description": "Descripción",
+      "priority": "Prioridad",
+      "priorityDefaultWith": "Por defecto del tipo ({{priority}})",
+      "municipality": "Municipio",
+      "locationDescription": "Ubicación",
+      "locationHint": "Descripción genérica del lugar, sin datos personales.",
+      "affectedPeople": "Personas afectadas",
+      "parent": "Incidente padre",
+      "noParent": "Sin incidente padre",
+      "parentHint": "Solo un nivel: un incidente agrupado no puede tener hijos.",
+      "children": "Incidentes agrupados",
+      "details": "Datos del tipo",
+      "reportedAt": "Notificado",
+      "updatedAt": "Actualizado",
+      "closedAt": "Finalizado",
+      "risks": "Riesgos frecuentes",
+      "suggestedResources": "Recursos sugeridos",
+      "selectType": "Selecciona un tipo"
+    },
+    "detail": {
+      "summary": "Resumen",
+      "hierarchy": "Relación entre incidentes",
+      "notFound": "El incidente no existe o ya no está disponible.",
+      "closedNotice": "Incidente finalizado: ya no admite cambios de estado ni edición, pero sí notas.",
+      "editTitle": "Editar incidente",
+      "conflict": {
+        "title": "El incidente ha cambiado",
+        "description": "Otra persona lo ha modificado mientras lo tenías abierto. Recarga para ver la versión actual antes de volver a intentarlo."
+      }
+    },
+    "actions": {
+      "label": "Acciones de estado",
+      "toStatus": {
+        "received": "Volver a recibido",
+        "assessing": "Pasar a valoración",
+        "resources_assigned": "Marcar recursos asignados",
+        "in_progress": "Iniciar intervención",
+        "controlled": "Marcar como controlado",
+        "closed": "Cerrar incidente",
+        "cancelled": "Cancelar incidente"
+      },
+      "reopen": "Reabrir intervención",
+      "confirm": {
+        "closedTitle": "¿Cerrar el incidente {{code}}?",
+        "closedDescription": "Quedará finalizado: no se podrá reabrir ni editar. Solo admitirá notas.",
+        "cancelledTitle": "¿Cancelar el incidente {{code}}?",
+        "cancelledDescription": "Quedará cancelado: no se podrá reabrir ni editar. Solo admitirá notas.",
+        "keep": "No, mantener",
+        "reason": "Motivo (opcional)",
+        "reasonPlaceholder": "Queda registrado en el historial."
+      }
+    },
+    "timeline": {
+      "title": "Historial",
+      "empty": "Sin entradas en el historial.",
+      "created": "Incidente registrado con prioridad {{priority}}",
+      "createdInParent": "Incidente registrado con prioridad {{priority}}, agrupado en {{parent}}",
+      "statusChanged": "Estado: {{from}} → {{to}}",
+      "reason": "Motivo: {{reason}}",
+      "priorityChanged": "Prioridad: {{from}} → {{to}}",
+      "updated": "Datos modificados: {{fields}}",
+      "noteAdded": "Nota",
+      "parentSet": "Agrupado en {{to}}",
+      "parentRemoved": "Separado de {{from}}",
+      "parentMoved": "Movido de {{from}} a {{to}}"
+    },
+    "notes": {
+      "label": "Nota",
+      "placeholder": "Escribe una nota para el historial (sin datos personales).",
+      "submit": "Añadir nota",
+      "submitting": "Añadiendo…"
+    },
+    "create": {
+      "title": "Nuevo incidente",
+      "description": "Registra un incidente. Empieza en estado «Recibido».",
+      "submit": "Registrar incidente",
+      "submitting": "Registrando…"
+    },
+    "validation": {
+      "typeRequired": "Selecciona el tipo de incidente.",
+      "titleRequired": "Escribe un título.",
+      "titleTooLong": "El título admite como máximo 200 caracteres.",
+      "descriptionTooLong": "La descripción admite como máximo 5000 caracteres.",
+      "municipalityRequired": "Indica el municipio.",
+      "municipalityTooLong": "El municipio admite como máximo 100 caracteres.",
+      "locationTooLong": "La ubicación admite como máximo 255 caracteres.",
+      "numberRange": "Introduce un valor entre {{min}} y {{max}}.",
+      "decimalNumber": "Introduce un número con dos decimales como máximo.",
+      "noteRequired": "Escribe la nota.",
+      "noteTooLong": "La nota admite como máximo 2000 caracteres."
+    },
+    "errors": {
+      "version_conflict": "Otra persona ha modificado el incidente. Recarga para ver la versión actual.",
+      "invalid_transition": "Ese cambio de estado no está permitido desde el estado actual.",
+      "incident_closed": "El incidente está finalizado y ya no se puede editar.",
+      "invalid_parent": "Ese incidente no puede ser el padre: solo se admite un nivel.",
+      "invalid_details": "Los datos específicos del tipo no son válidos.",
+      "details_not_allowed": "Este tipo de incidente no admite datos específicos.",
+      "field_not_nullable": "Hay un campo obligatorio vacío.",
+      "incident_type_not_found": "El tipo de incidente no existe o está inactivo.",
+      "incident_not_found": "El incidente no existe.",
+      "permission_denied": "Tu rol no tiene permiso para esta acción.",
+      "validation_error": "Hay datos no válidos en el formulario.",
+      "network_error": "No se puede contactar con el servidor. Comprueba la conexión.",
+      "unexpected": "Se ha producido un error inesperado. Inténtalo de nuevo."
+    }
+  },
+  "incidentStatus": {
+    "label": "Estado",
+    "received": "Recibido",
+    "assessing": "En valoración",
+    "resources_assigned": "Recursos asignados",
+    "in_progress": "En intervención",
+    "controlled": "Controlado",
+    "closed": "Cerrado",
+    "cancelled": "Cancelado"
+  },
+  "incidentTypes": {
+    "wildfire": "Incendio forestal",
+    "structure_fire": "Incendio en edificio",
+    "traffic_accident": "Accidente de tráfico",
+    "medical_emergency": "Emergencia sanitaria",
+    "mountain_rescue": "Rescate en montaña",
+    "water_rescue": "Rescate acuático",
+    "flood": "Inundación",
+    "severe_weather": "Fenómeno meteorológico adverso",
+    "hazmat": "Mercancías peligrosas",
+    "landslide": "Desprendimiento de tierras"
+  },
+  "incidentCategories": {
+    "fire": "Incendios",
+    "traffic": "Tráfico",
+    "medical": "Sanitaria",
+    "rescue": "Rescate",
+    "weather": "Meteorología",
+    "hazmat": "Materias peligrosas",
+    "geological": "Geológica"
+  },
+  "incidentRisks": {
+    "smoke_inhalation": "Inhalación de humo",
+    "fire_spread": "Propagación del fuego",
+    "evacuation_needed": "Posible evacuación",
+    "structural_collapse": "Colapso estructural",
+    "trapped_people": "Personas atrapadas",
+    "fuel_spill": "Derrame de combustible",
+    "secondary_collision": "Colisión secundaria",
+    "life_threatening": "Riesgo vital",
+    "hypothermia": "Hipotermia",
+    "difficult_access": "Acceso difícil",
+    "drowning": "Ahogamiento",
+    "rising_water": "Crecida del agua",
+    "power_outage": "Corte de suministro eléctrico",
+    "falling_objects": "Caída de objetos",
+    "road_blocked": "Vía cortada",
+    "toxic_exposure": "Exposición tóxica",
+    "explosion": "Explosión"
+  },
+  "incidentFields": {
+    "title": "título",
+    "description": "descripción",
+    "priority": "prioridad",
+    "municipality": "municipio",
+    "location_description": "ubicación",
+    "affected_people": "personas afectadas",
+    "details": "datos del tipo"
+  },
+  "incidentDetails": {
+    "affected_hectares": "Superficie afectada (ha)",
+    "vegetation": "Vegetación",
+    "vegetationValues": {
+      "forest": "Forestal",
+      "scrub": "Matorral",
+      "agricultural": "Agrícola"
+    },
+    "water_level_cm": "Nivel del agua (cm)"
+  },
+  "resourceTypes": {
+    "fire_engine": "Autobomba",
+    "rescue_vehicle": "Vehículo de rescate",
+    "ambulance_basic": "Ambulancia de soporte vital básico",
+    "ambulance_advanced": "Ambulancia de soporte vital avanzado",
+    "command_vehicle": "Vehículo de mando",
+    "civil_protection_unit": "Unidad de protección civil",
+    "logistics_support": "Apoyo logístico"
+  },
+  "resources": {
+    "title": "Recursos",
+    "description": "Recursos operativos de las organizaciones.",
+    "new": "Nuevo recurso",
+    "deactivated": "Desactivado",
+    "list": {
+      "empty": "No hay recursos activos.",
+      "emptyFiltered": "Ningún recurso coincide con los filtros.",
+      "range": "{{from}}–{{to}} de {{total}}",
+      "columns": {
+        "code": "Código",
+        "name": "Nombre",
+        "type": "Tipo",
+        "organization": "Organización",
+        "municipality": "Municipio",
+        "status": "Estado",
+        "statusChangedAt": "Último cambio"
+      }
+    },
+    "filters": {
+      "label": "Filtros",
+      "search": "Buscar",
+      "searchPlaceholder": "Código o nombre",
+      "status": "Estado",
+      "type": "Tipo",
+      "organization": "Organización",
+      "includeInactive": "Incluir desactivados",
+      "sort": "Orden",
+      "apply": "Buscar",
+      "clear": "Limpiar filtros"
+    },
+    "sort": {
+      "code": "Código",
+      "status": "Disponibilidad",
+      "statusChangedDesc": "Último cambio de estado"
+    },
+    "fields": {
+      "code": "Código",
+      "codeHint": "Identificador único: de 2 a 32 letras, números o guiones. Se guarda en mayúsculas y no se puede cambiar después.",
+      "name": "Nombre",
+      "type": "Tipo de recurso",
+      "category": "Categoría",
+      "organization": "Organización",
+      "municipality": "Municipio base",
+      "initialStatus": "Estado inicial",
+      "statusDefault": "Disponible (por defecto)",
+      "statusChangedAt": "Último cambio de estado",
+      "updatedAt": "Actualizado",
+      "selectType": "Selecciona un tipo",
+      "selectOrganization": "Selecciona una organización"
+    },
+    "detail": {
+      "summary": "Ficha",
+      "notFound": "El recurso no existe o ya no está disponible.",
+      "inactiveNotice": "Recurso desactivado: no cambia de estado hasta que se reactive.",
+      "noHistory": "En esta fase no se guarda el historial del recurso: solo su último cambio de estado.",
+      "editTitle": "Editar recurso",
+      "conflict": {
+        "title": "El recurso ha cambiado",
+        "description": "Otra persona lo ha modificado mientras lo tenías abierto. Recarga para ver la versión actual antes de volver a intentarlo."
+      }
+    },
+    "actions": {
+      "label": "Estado operativo",
+      "toStatus": {
+        "available": "Marcar disponible",
+        "in_service": "Poner en servicio",
+        "out_of_service": "Marcar fuera de servicio"
+      },
+      "deactivate": "Desactivar",
+      "reactivate": "Reactivar",
+      "confirmDeactivate": {
+        "title": "¿Desactivar el recurso {{code}}?",
+        "description": "Dejará de aparecer en los listados y no podrá cambiar de estado. Se puede reactivar después.",
+        "keep": "No, mantener"
+      }
+    },
+    "create": {
+      "title": "Nuevo recurso",
+      "description": "Registra un recurso de una organización.",
+      "submit": "Registrar recurso",
+      "submitting": "Registrando…"
+    },
+    "validation": {
+      "code": "Usa de 2 a 32 letras, números o guiones, empezando por letra o número.",
+      "nameRequired": "Escribe un nombre.",
+      "nameTooLong": "El nombre admite como máximo 200 caracteres.",
+      "typeRequired": "Selecciona el tipo de recurso.",
+      "organizationRequired": "Selecciona la organización.",
+      "municipalityRequired": "Indica el municipio base.",
+      "municipalityTooLong": "El municipio admite como máximo 100 caracteres."
+    },
+    "errors": {
+      "version_conflict": "Otra persona ha modificado el recurso. Recarga para ver la versión actual.",
+      "invalid_transition": "El recurso ya está en ese estado.",
+      "resource_inactive": "El recurso está desactivado: reactívalo antes de cambiar su estado.",
+      "resource_code_taken": "Ya existe un recurso con ese código.",
+      "resource_type_not_found": "El tipo de recurso no existe o está inactivo.",
+      "organization_not_found": "La organización no existe o está inactiva.",
+      "resource_not_found": "El recurso no existe.",
+      "field_not_nullable": "Hay un campo obligatorio vacío.",
+      "permission_denied": "Tu rol no tiene permiso para esta acción.",
+      "validation_error": "Hay datos no válidos en el formulario.",
+      "network_error": "No se puede contactar con el servidor. Comprueba la conexión.",
+      "unexpected": "Se ha producido un error inesperado. Inténtalo de nuevo."
+    }
+  },
+  "resourceStatus": {
+    "label": "Estado",
+    "available": "Disponible",
+    "in_service": "En servicio",
+    "out_of_service": "Fuera de servicio"
+  },
+  "resourceCategories": {
+    "fire": "Incendios",
+    "rescue": "Rescate",
+    "medical": "Sanitaria",
+    "command": "Mando",
+    "civil_protection": "Protección civil",
+    "logistics": "Logística"
+  },
+  "priority": {
+    "label": "Prioridad",
+    "critical": "Crítica",
+    "high": "Alta",
+    "medium": "Media",
+    "low": "Baja"
+  },
+  "ops": {
+    "panel": {
+      "emptyTitle": "Sin elementos",
+      "errorTitle": "No se han podido cargar los datos",
+      "errorDescription": "Comprueba la conexión e inténtalo de nuevo."
+    },
+    "kpi": {
+      "unavailable": "No disponible"
+    },
+    "filters": {
+      "any": "Todos"
+    },
+    "pagination": {
+      "label": "Paginación",
+      "previous": "Anterior",
+      "next": "Siguiente"
+    },
+    "conflict": {
+      "reload": "Recargar"
+    },
+    "simulated": "Simulado",
+    "simulatedHint": "Dato simulado de demostración"
+  },
+  "errors": {
+    "notFound": {
+      "title": "Página no encontrada",
+      "description": "La dirección solicitada no existe.",
+      "backHome": "Volver al inicio"
+    },
+    "unexpected": {
+      "title": "Se ha producido un error",
+      "description": "No se ha podido mostrar esta pantalla. Recarga la página para intentarlo de nuevo."
+    },
+    "forbidden": {
+      "title": "Acceso no permitido",
+      "description": "Tu rol no tiene permiso para ver esta sección."
+    }
+  },
+  "designSystem": {
+    "title": "Sistema de diseño",
+    "description": "Catálogo de desarrollo: tokens, tipografía y componentes base en todos sus estados. No existe en producción.",
+    "sections": {
+      "surfaces": "Superficies y texto",
+      "status": "Colores de estado",
+      "typography": "Escala tipográfica",
+      "data": "Datos monoespaciados",
+      "shape": "Radios y filas",
+      "motion": "Movimiento",
+      "icons": "Iconos de estado",
+      "buttons": "Botones",
+      "fields": "Campos de formulario",
+      "alerts": "Alertas",
+      "table": "Tabla",
+      "priorityBadge": "PriorityBadge",
+      "statusPill": "StatusPill",
+      "kpiTile": "KpiTile",
+      "panel": "Panel",
+      "dialog": "Dialog",
+      "confirmDialog": "ConfirmDialog"
+    },
+    "status": {
+      "critical": "Crítico",
+      "high": "Alta",
+      "warning": "Advertencia",
+      "ok": "Normal",
+      "info": "Información",
+      "inactive": "Inactivo"
+    },
+    "variants": {
+      "text": "Texto",
+      "subtle": "Fondo tenue",
+      "border": "Borde"
+    },
+    "typographySample": "Unidad asignada al incidente en curso",
+    "dataLabels": {
+      "code": "Código",
+      "time": "Hora",
+      "coordinates": "Coordenadas"
+    },
+    "rowSample": "Fila de 32 px",
+    "radiusLabel": "Radio {{value}}",
+    "pulseSample": "Pulso crítico (se desactiva con «reducir movimiento»)",
+    "focusHint": "Recorre esta página con Tab para revisar el foco de teclado de cada componente.",
+    "buttons": {
+      "variants": {
+        "default": "Principal",
+        "secondary": "Secundario",
+        "outline": "Contorno",
+        "ghost": "Fantasma",
+        "destructive": "Destructivo",
+        "link": "Enlace"
+      },
+      "sizes": "Tamaños",
+      "states": "Estados",
+      "disabled": "Deshabilitado",
+      "withIcon": "Con icono",
+      "iconOnly": "Actualizar"
+    },
+    "fields": {
+      "emailLabel": "Correo electrónico",
+      "emailPlaceholder": "nombre@ejemplo.test",
+      "emailDescription": "Usa la cuenta de tu organización.",
+      "disabledLabel": "Campo deshabilitado",
+      "invalidLabel": "Contraseña",
+      "invalidError": "La contraseña es obligatoria."
+    },
+    "alerts": {
+      "infoTitle": "Datos simulados",
+      "infoDescription": "Toda la información de esta demostración es ficticia.",
+      "errorTitle": "Error de conexión",
+      "errorDescription": "No se ha podido contactar con el servidor."
+    },
+    "table": {
+      "code": "Código",
+      "priority": "Prioridad",
+      "status": "Estado",
+      "time": "Hora",
+      "caption": "Tabla densa con filas de 32 px."
+    },
+    "kpi": {
+      "active": "Incidentes activos",
+      "critical": "Críticos",
+      "availability": "Disponibilidad",
+      "noData": "Sin dato",
+      "loading": "Cargando",
+      "error": "Con error"
+    },
+    "panel": {
+      "ready": "Con contenido",
+      "loading": "Cargando",
+      "empty": "Vacío",
+      "emptyDescription": "Cuando haya elementos aparecerán aquí.",
+      "error": "Con error",
+      "content": "Contenido del panel.",
+      "action": "Acción"
+    },
+    "dialog": {
+      "open": "Abrir diálogo",
+      "title": "Detalle",
+      "description": "Diálogo informativo. Se cierra con el botón o con Escape."
+    },
+    "confirm": {
+      "openDefault": "Confirmar acción",
+      "openDestructive": "Acción destructiva",
+      "defaultTitle": "¿Confirmar la acción?",
+      "defaultDescription": "Podrás revisarla después.",
+      "defaultConfirm": "Confirmar",
+      "destructiveTitle": "¿Eliminar el elemento?",
+      "destructiveDescription": "Esta acción es irreversible.",
+      "destructiveConfirm": "Eliminar"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+# Fin de línea LF en todo el repositorio: los scripts se ejecutan en
+# contenedores Linux y core.autocrlf=true en Windows los rompería con CRLF.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

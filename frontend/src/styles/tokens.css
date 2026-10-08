@@ -1,0 +1,226 @@
+/*
+ * Tokens de diseño de Emergency Command (CLAUDE.md §7).
+ *
+ * Fuente única de verdad de colores, tipografía, medidas y movimiento.
+ * Interfaz solo oscura. Ningún componente usa colores fuera de estos tokens:
+ * la paleta por defecto de Tailwind se elimina (`--color-*: initial`).
+ */
+
+:root {
+  /* --- Base ------------------------------------------------------------- */
+  --bg: #0b0e13;
+  --surface-1: #11151c;
+  --surface-2: #171c25;
+  --border: #232a36;
+  --text: #e6eaf0;
+  --text-muted: #9aa4b2;
+
+  /* --- Estado (solo para comunicar estado, nunca decorativos) ----------- */
+  --status-critical: #ef4444;
+  --status-high: #f97316;
+  --status-warning: #eab308;
+  --status-ok: #22c55e;
+  --status-info: #3b82f6;
+  --status-inactive: #6b7280;
+  /* Texto de `inactive` más claro: #6b7280 no alcanza AA (4,5:1) sobre las
+     superficies oscuras. Fondo tenue y borde mantienen #6b7280. */
+  --status-inactive-text: #9ca3af;
+
+  /* Variantes por color: texto (el color), fondo tenue y borde. */
+  --status-subtle-mix: 14%;
+  --status-border-mix: 45%;
+
+  /* --- Medidas -------------------------------------------------------- */
+  --row-height: 32px;
+  --radius: 6px;
+
+  /* --- Variables semánticas de shadcn/ui, mapeadas a los tokens ---------- */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface-1);
+  --card-foreground: var(--text);
+  --popover: var(--surface-2);
+  --popover-foreground: var(--text);
+  /* Acción principal neutra: el color de estado no se usa como decoración. */
+  --primary: var(--text);
+  --primary-foreground: var(--bg);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--text);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--surface-2);
+  --accent-foreground: var(--text);
+  --destructive: var(--status-critical);
+  --input: var(--border);
+  /* Foco de teclado: neutro y de alto contraste. Los componentes lo usan al 50 %
+     de opacidad (`ring-ring/50`), que con este valor sigue superando 3:1. */
+  --ring: var(--text);
+  --sidebar: var(--surface-1);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--text);
+  --sidebar-primary-foreground: var(--bg);
+  --sidebar-accent: var(--surface-2);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--text);
+}
+
+@theme inline {
+  /* --- Colores: solo tokens --------------------------------------------- */
+  --color-*: initial;
+  --color-black: #000;
+  --color-white: #fff;
+
+  --color-bg: var(--bg);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+
+  --color-critical: var(--status-critical);
+  --color-critical-subtle: color-mix(
+    in srgb,
+    var(--status-critical) var(--status-subtle-mix),
+    transparent
+  );
+  --color-critical-border: color-mix(
+    in srgb,
+    var(--status-critical) var(--status-border-mix),
+    transparent
+  );
+  --color-high: var(--status-high);
+  --color-high-subtle: color-mix(in srgb, var(--status-high) var(--status-subtle-mix), transparent);
+  --color-high-border: color-mix(in srgb, var(--status-high) var(--status-border-mix), transparent);
+  --color-warning: var(--status-warning);
+  --color-warning-subtle: color-mix(
+    in srgb,
+    var(--status-warning) var(--status-subtle-mix),
+    transparent
+  );
+  --color-warning-border: color-mix(
+    in srgb,
+    var(--status-warning) var(--status-border-mix),
+    transparent
+  );
+  --color-ok: var(--status-ok);
+  --color-ok-subtle: color-mix(in srgb, var(--status-ok) var(--status-subtle-mix), transparent);
+  --color-ok-border: color-mix(in srgb, var(--status-ok) var(--status-border-mix), transparent);
+  --color-info: var(--status-info);
+  --color-info-subtle: color-mix(in srgb, var(--status-info) var(--status-subtle-mix), transparent);
+  --color-info-border: color-mix(in srgb, var(--status-info) var(--status-border-mix), transparent);
+  --color-inactive: var(--status-inactive-text);
+  --color-inactive-subtle: color-mix(
+    in srgb,
+    var(--status-inactive) var(--status-subtle-mix),
+    transparent
+  );
+  --color-inactive-border: color-mix(
+    in srgb,
+    var(--status-inactive) var(--status-border-mix),
+    transparent
+  );
+
+  /* Semánticos de shadcn/ui. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* --- Tipografía ----------------------------------------------------- */
+  --font-*: initial;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  /*
+   * Escala densa. `text-sm` es la base de 13 px de la interfaz porque es el
+   * tamaño que usan por defecto los componentes de shadcn/ui.
+   */
+  --text-*: initial;
+  --text-xs: 11px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 20px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-lg: 16px;
+  --text-lg--line-height: 24px;
+  --text-xl: 18px;
+  --text-xl--line-height: 24px;
+  --text-2xl: 22px;
+  --text-2xl--line-height: 28px;
+  --text-3xl: 28px;
+  --text-3xl--line-height: 32px;
+
+  /* --- Medidas (rejilla de 4 px: --spacing = 0.25rem) -------------------- */
+  --spacing-row: var(--row-height);
+
+  /* Radios de 4–6 px en toda la escala, también en componentes de shadcn. */
+  --radius-*: initial;
+  --radius-xs: 4px;
+  --radius-sm: 4px;
+  --radius-md: 5px;
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+  --radius-2xl: var(--radius);
+  --radius-3xl: var(--radius);
+  --radius-4xl: var(--radius);
+
+  /* Bordes en lugar de sombras. */
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+
+  /* --- Movimiento ----------------------------------------------------- */
+  /* La única animación permitida es el pulso crítico (utilidad `critical-pulse`). */
+  --animate-*: initial;
+  /* Las clases `transition-*` de los componentes no animan. */
+  --default-transition-duration: 0s;
+}
+
+/* Pulso de elementos críticos. Solo se aplica si el usuario no ha pedido
+   reducir el movimiento. */
+@utility critical-pulse {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: critical-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes critical-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Códigos, horas y coordenadas: monoespaciada con cifras tabulares. */
+@utility font-data {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums slashed-zero;
+}

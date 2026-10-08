@@ -1,0 +1,53 @@
+@import "tailwindcss";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@import "./tokens.css";
+
+/* Solo tema oscuro: <html class="dark"> mantiene activas las variantes `dark:`. */
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  html {
+    color-scheme: dark;
+    font-family: var(--font-sans);
+    background-color: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    min-height: 100dvh;
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+  }
+
+  * {
+    border-color: var(--border);
+    outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
+  }
+
+  /*
+   * Movimiento (CLAUDE.md §7): la única animación permitida es el pulso
+   * crítico. Esta regla neutraliza cualquier transición o animación que traigan
+   * los componentes de terceros (p. ej. `duration-100`, `animate-in`). Las
+   * declaraciones !important de la capa base prevalecen sobre las utilidades.
+   */
+  *,
+  ::before,
+  ::after {
+    transition: none !important;
+  }
+  :not(.critical-pulse),
+  ::before,
+  ::after {
+    animation: none !important;
+  }
+
+  /* Foco de teclado siempre visible en elementos sin estilo propio. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}

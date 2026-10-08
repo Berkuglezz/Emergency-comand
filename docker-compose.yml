@@ -1,0 +1,93 @@
+# Emergency Command — entorno local de desarrollo (prototipo de demostración).
+#
+#   cp .env.example .env
+#   docker compose up --build          # levanta db, backend y frontend
+#   docker compose up --build --watch  # además sincroniza cambios de código
+#
+# Las imágenes de backend y frontend son de desarrollo (recarga en caliente,
+# dependencias de desarrollo incluidas). No son imágenes de producción.
+
+name: emergency-command
+
+services:
+  db:
+    # PostGIS desde el inicio para no cambiar de imagen más adelante.
+    # Hasta la Fase 3 la extensión solo se habilita; no hay uso geográfico.
+    image: postgis/postgis:18-3.6
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Define POSTGRES_USER en .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Define POSTGRES_DB en .env}
+    ports:
+      - "${DB_HOST_PORT:-5433}:5432"
+    volumes:
+      # A partir de PostgreSQL 18 el volumen se monta en /var/lib/postgresql.
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      # -h 127.0.0.1 fuerza TCP: durante la inicialización el servidor temporal
+      # solo escucha en el socket Unix y no debe considerarse listo.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    env_file: .env
+    environment:
+      # Dentro de la red de Compose la base de datos es el servicio `db`.
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+    ports:
+      - "${BACKEND_HOST_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    develop:
+      watch:
+        - action: sync
+          path: ./backend
+          target: /app
+          ignore:
+            - .venv/
+            - .pytest_cache/
+            - .mypy_cache/
+            - .ruff_cache/
+        - action: rebuild
+          path: ./backend/pyproject.toml
+        - action: rebuild
+          path: ./backend/uv.lock
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      # Vite redirige /api al backend; el navegador solo habla con el frontend.
+      API_PROXY_TARGET: http://backend:8000
+    ports:
+      - "${FRONTEND_HOST_PORT:-5173}:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend
+          target: /app
+          ignore:
+            - node_modules/
+            - dist/
+        - action: rebuild
+          path: ./frontend/package.json
+        - action: rebuild
+          path: ./frontend/pnpm-lock.yaml
+
+volumes:
+  db-data:
