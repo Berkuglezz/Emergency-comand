@@ -15,6 +15,8 @@ Transiciones automáticas (asignación de recursos, Fase 4):
 `resources_assigned` nunca es una acción manual: solo se alcanza asignando.
 """
 
+from collections.abc import Iterable, Mapping
+
 from app.domain.enums import IncidentPriority, IncidentStatus
 
 S = IncidentStatus
@@ -94,3 +96,35 @@ def reachable_statuses() -> frozenset[IncidentStatus]:
                 seen.add(target)
                 pending.append(target)
     return frozenset(seen)
+
+
+# --- Edición operativa (CLAUDE.md §2.11, D6) ------------------------------------
+
+# Campos que puede modificar quien solo tiene la edición operativa. El resto
+# (prioridad, título, incidente padre…) exige la edición completa. El tipo no
+# se puede cambiar nunca.
+OPERATIONAL_FIELDS: frozenset[str] = frozenset(
+    {"description", "affected_people", "location", "details"}
+)
+
+
+def fields_requiring_full_edit(sent: Iterable[str]) -> frozenset[str]:
+    """Campos enviados en una edición que quedan fuera de la edición operativa.
+
+    Cuenta lo **enviado**, no lo que cambiaría: una petición que incluye un
+    campo no permitido se rechaza entera aunque su valor coincida con el actual.
+    """
+    return frozenset(sent) - OPERATIONAL_FIELDS
+
+
+# Campos del alta que solo puede indicar quien tiene la edición completa
+# (CLAUDE.md §2.11, D10 y D11). Sin ella, se aplican sus valores por defecto:
+# la prioridad del tipo y ningún incidente padre.
+CREATE_FIELDS_REQUIRING_FULL_EDIT: frozenset[str] = frozenset({"priority", "parent_incident_id"})
+
+
+def create_fields_requiring_full_edit(values: Mapping[str, object]) -> frozenset[str]:
+    """Campos del alta con valor (distinto de `None`) que exigen la edición completa."""
+    return frozenset(
+        name for name in CREATE_FIELDS_REQUIRING_FULL_EDIT if values.get(name) is not None
+    )

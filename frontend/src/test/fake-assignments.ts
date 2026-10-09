@@ -8,6 +8,7 @@ import type { components } from "@/types/api"
 
 import type { FakeIncidents, StoredIncident } from "./fake-incidents"
 import type { FakeResources } from "./fake-resources"
+import { canWrite } from "./fake-scope"
 
 type Schemas = components["schemas"]
 type Me = Schemas["MeResponse"]
@@ -82,13 +83,14 @@ export class FakeAssignments {
       }
       if (method === "GET") {
         if (!can("resources:read")) return error(403, "permission_denied")
-        return json(200, this.candidates(incident, query))
+        return json(200, this.candidates(incident, query, user))
       }
       if (!can("assignments:manage")) return error(403, "permission_denied")
       if (input.version !== incident.version) return error(409, "version_conflict")
       if (TERMINAL.includes(incident.status)) return error(422, "incident_closed")
       const resource = this.resources.resources.find((r) => r.id === input.resource_id)
       if (!resource) return error(404, "resource_not_found")
+      if (!canWrite(user, resource.organization.id)) return error(403, "organization_out_of_scope")
       const current = this.activeFor(resource.id)
       let from: string | null = null
       if (current) {
@@ -120,6 +122,8 @@ export class FakeAssignments {
       const incident = this.incidentById(assignment.incident_id)
       if (input.version !== incident.version) return error(409, "version_conflict")
       if (assignment.released_at !== null) return error(422, "assignment_already_released")
+      if (!canWrite(user, assignment.resource.organization.id))
+        return error(403, "organization_out_of_scope")
       if (action === "arrival") {
         if (assignment.arrived_at !== null) return error(422, "assignment_already_arrived")
         assignment.arrived_at = this.incidents.now()
@@ -240,7 +244,8 @@ export class FakeAssignments {
 
   private candidates(
     incident: StoredIncident,
-    query: URLSearchParams
+    query: URLSearchParams,
+    user: Me
   ): Schemas["AssignmentCandidate"][] {
     const type = query.get("type")
     const includeAssigned = query.get("include_assigned") === "true"
@@ -248,6 +253,8 @@ export class FakeAssignments {
     const list: Schemas["AssignmentCandidate"][] = []
     for (const resource of this.resources.resources) {
       if (!resource.is_active || (type && resource.type.code !== type)) continue
+      // Solo los del ámbito de escritura: los que el usuario podría asignar.
+      if (!canWrite(user, resource.organization.id)) continue
       const current = this.activeFor(resource.id)
       if (current && (current.incident_id === incident.id || !includeAssigned)) continue
       if (!current && resource.status !== "available") continue

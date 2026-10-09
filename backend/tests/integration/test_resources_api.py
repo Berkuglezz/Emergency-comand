@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import RoleCode
 from app.models import Organization, ResourceType
-from tests.conftest import API, Headers
+from tests.conftest import API, Headers, MemberHeadersFactory
 
 
 async def _org(session: AsyncSession, code: str = "test-org", *, is_active: bool = True) -> str:
@@ -71,7 +71,10 @@ async def _set_status(
 
 
 async def test_everyone_reads_and_changes_status_but_only_admin_manages(
-    client: AsyncClient, session: AsyncSession, headers: dict[RoleCode, Headers]
+    client: AsyncClient,
+    session: AsyncSession,
+    headers: dict[RoleCode, Headers],
+    member_headers: MemberHeadersFactory,
 ) -> None:
     resource = await _create(client, session, headers[RoleCode.ADMIN])
     path = f"{API}/resources/{resource['id']}"
@@ -100,8 +103,10 @@ async def test_everyone_reads_and_changes_status_but_only_admin_manages(
         assert patched.status_code == 403
         assert patched.json() == {"detail": "permission_denied"}
 
-    # El estado operativo lo puede cambiar cualquier rol (incluido el operador).
-    resource = await _set_status(client, headers[RoleCode.OPERATOR], resource, "in_service")
+    # El estado operativo lo cambian todos los roles; el operador, solo en los
+    # recursos de su organización (CLAUDE.md §2.11, R.4).
+    operator = await member_headers(RoleCode.OPERATOR, resource["organization"]["id"])
+    resource = await _set_status(client, operator, resource, "in_service")
     resource = await _set_status(client, headers[RoleCode.COORDINATOR], resource, "available")
     assert resource["version"] == 3
 
@@ -217,10 +222,14 @@ async def test_type_and_organization_must_exist_and_be_active(
 
 
 async def test_status_change_updates_timestamp_and_version(
-    client: AsyncClient, session: AsyncSession, headers: dict[RoleCode, Headers]
+    client: AsyncClient,
+    session: AsyncSession,
+    headers: dict[RoleCode, Headers],
+    member_headers: MemberHeadersFactory,
 ) -> None:
     resource = await _create(client, session, headers[RoleCode.ADMIN])
-    changed = await _set_status(client, headers[RoleCode.OPERATOR], resource, "out_of_service")
+    operator = await member_headers(RoleCode.OPERATOR, resource["organization"]["id"])
+    changed = await _set_status(client, operator, resource, "out_of_service")
 
     assert changed["status"] == "out_of_service"
     assert changed["version"] == resource["version"] + 1
@@ -230,13 +239,16 @@ async def test_status_change_updates_timestamp_and_version(
 
 
 async def test_same_status_is_rejected(
-    client: AsyncClient, session: AsyncSession, headers: dict[RoleCode, Headers]
+    client: AsyncClient,
+    session: AsyncSession,
+    headers: dict[RoleCode, Headers],
+    member_headers: MemberHeadersFactory,
 ) -> None:
     resource = await _create(client, session, headers[RoleCode.ADMIN])
     response = await client.post(
         f"{API}/resources/{resource['id']}/status",
         json={"status": "available", "version": resource["version"]},
-        headers=headers[RoleCode.OPERATOR],
+        headers=await member_headers(RoleCode.OPERATOR, resource["organization"]["id"]),
     )
     assert response.status_code == 422
     assert response.json() == {"detail": "invalid_transition"}
@@ -265,7 +277,10 @@ async def test_stale_version_is_rejected_without_side_effects(
 
 
 async def test_inactive_resources_cannot_change_status(
-    client: AsyncClient, session: AsyncSession, headers: dict[RoleCode, Headers]
+    client: AsyncClient,
+    session: AsyncSession,
+    headers: dict[RoleCode, Headers],
+    member_headers: MemberHeadersFactory,
 ) -> None:
     admin = headers[RoleCode.ADMIN]
     resource = await _create(client, session, admin)
@@ -279,7 +294,7 @@ async def test_inactive_resources_cannot_change_status(
     response = await client.post(
         f"{path}/status",
         json={"status": "in_service", "version": resource["version"]},
-        headers=headers[RoleCode.OPERATOR],
+        headers=await member_headers(RoleCode.OPERATOR, resource["organization"]["id"]),
     )
     assert response.status_code == 422
     assert response.json() == {"detail": "resource_inactive"}

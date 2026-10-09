@@ -67,9 +67,11 @@ async def _events(client: AsyncClient, headers: Headers, incident_id: str) -> li
 # --- Permisos (el backend es la fuente de verdad) --------------------------------
 
 
-async def test_operator_can_read_but_never_write(
+async def test_operator_registers_and_annotates_but_does_not_manage(
     client: AsyncClient, session: AsyncSession, headers: dict[RoleCode, Headers]
 ) -> None:
+    """CLAUDE.md §2.11: el operador registra incidentes y añade notas, pero no
+    edita la ficha completa, no cambia el estado del incidente ni lo cierra."""
     incident = await _create(client, session, headers[RoleCode.COORDINATOR])
     operator = headers[RoleCode.OPERATOR]
     path = f"{API}/incidents/{incident['id']}"
@@ -77,25 +79,32 @@ async def test_operator_can_read_but_never_write(
     for read in (f"{API}/incidents", path, f"{path}/events", f"{API}/incident-types"):
         assert (await client.get(read, headers=operator)).status_code == 200, read
 
-    type_id = await _type_id(session, "flood")
-    writes = [
+    # Alta y nota: permitidas.
+    created = await _create(client, session, operator, type_code="flood", title="Aviso")
+    assert created["status"] == "received"
+    note = await client.post(f"{path}/notes", json={"text": "Nota del operador"}, headers=operator)
+    assert note.status_code == 201, note.text
+
+    forbidden = [
+        # Edición completa: el título no es un campo operativo (R.2).
+        ("PATCH", path, {"version": 1, "title": "cambio"}, "field_not_permitted"),
+        ("POST", f"{path}/status", {"status": "assessing", "version": 1}, "permission_denied"),
+        ("POST", f"{path}/status", {"status": "cancelled", "version": 1}, "permission_denied"),
         (
             "POST",
-            f"{API}/incidents",
-            {"type_id": type_id, "title": "x", "location": {"municipality": "Gijón"}},
+            f"{path}/assignments",
+            {"resource_id": str(uuid.uuid4()), "version": 1},
+            "permission_denied",
         ),
-        ("PATCH", path, {"version": 1, "title": "cambio"}),
-        ("POST", f"{path}/status", {"status": "assessing", "version": 1}),
-        ("POST", f"{path}/status", {"status": "cancelled", "version": 1}),
-        ("POST", f"{path}/notes", {"text": "nota"}),
     ]
-    for method, url, body in writes:
+    for method, url, body, code in forbidden:
         response = await client.request(method, url, json=body, headers=operator)
         assert response.status_code == 403, (method, url)
-        assert response.json() == {"detail": "permission_denied"}
+        assert response.json() == {"detail": code}
 
-    # Nada ha cambiado ni se ha registrado.
-    assert len(await _events(client, operator, incident["id"])) == 1
+    # Solo consta la nota: ni la ficha ni el estado han cambiado.
+    events = await _events(client, operator, incident["id"])
+    assert [event["event_type"] for event in events] == ["incident_created", "note_added"]
     detail = (await client.get(path, headers=operator)).json()
     assert (detail["version"], detail["status"], detail["title"]) == (
         1,

@@ -83,7 +83,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Me */
+        /**
+         * Me
+         * @description Perfil, permisos y ámbito organizativo efectivos del usuario autenticado.
+         */
         get: operations["me_api_v1_auth_me_get"];
         put?: never;
         post?: never;
@@ -265,6 +268,7 @@ export interface paths {
          * Assign Resource
          * @description Asigna un recurso disponible. Con `reassign: true`, si está asignado a otro
          *     incidente, se retira de él y se asigna a este en la misma transacción.
+         *     Recurso fuera del ámbito de escritura del usuario: 403 `organization_out_of_scope`.
          */
         post: operations["assign_resource_api_v1_incidents__incident_id__assignments_post"];
         delete?: never;
@@ -285,6 +289,7 @@ export interface paths {
          * @description Recursos asignables ordenados por ETA **estimada** (sin estimación, al final),
          *     con los tipos sugeridos marcados. Ayuda a la decisión: no se preselecciona ninguno.
          *     `include_assigned=true` añade los asignados a otros incidentes (exigen reasignar).
+         *     Solo recursos del ámbito de escritura del usuario.
          */
         get: operations["list_assignment_candidates_api_v1_incidents__incident_id__assignment_candidates_get"];
         put?: never;
@@ -307,6 +312,7 @@ export interface paths {
         /**
          * Mark Arrival
          * @description Marca que el recurso ha llegado al lugar. No cambia el estado del incidente.
+         *     Recurso fuera del ámbito de escritura del usuario: 403 `organization_out_of_scope`.
          */
         post: operations["mark_arrival_api_v1_assignments__assignment_id__arrival_post"];
         delete?: never;
@@ -327,6 +333,7 @@ export interface paths {
         /**
          * Release Resource
          * @description Retira el recurso con un motivo (`completed`, `not_needed` o `unavailable`).
+         *     Recurso fuera del ámbito de escritura del usuario: 403 `organization_out_of_scope`.
          */
         post: operations["release_resource_api_v1_assignments__assignment_id__release_post"];
         delete?: never;
@@ -361,7 +368,8 @@ export interface paths {
         };
         /**
          * List Resources
-         * @description Recursos. Por defecto solo los activos (`active=false` incluye los desactivados).
+         * @description Recursos del ámbito de lectura del usuario (con D4, todas las organizaciones).
+         *     Por defecto solo los activos (`active=false` incluye los desactivados).
          */
         get: operations["list_resources_api_v1_resources_get"];
         put?: never;
@@ -380,7 +388,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Resource */
+        /**
+         * Get Resource
+         * @description Ficha del recurso. Fuera del ámbito de lectura: 404, como si no existiera.
+         */
         get: operations["get_resource_api_v1_resources__resource_id__get"];
         put?: never;
         post?: never;
@@ -403,7 +414,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Change Resource Status */
+        /**
+         * Change Resource Status
+         * @description Estado operativo del recurso. Fuera del ámbito de escritura del usuario:
+         *     403 `organization_out_of_scope`.
+         */
         post: operations["change_resource_status_api_v1_resources__resource_id__status_post"];
         delete?: never;
         options?: never;
@@ -435,6 +450,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AccessScopeResponse
+         * @description Ámbito organizativo efectivo (CLAUDE.md §2.11). Lo calcula el backend; el
+         *     cliente solo lo usa para adaptar la interfaz y el backend lo vuelve a
+         *     comprobar en cada petición.
+         */
+        AccessScopeResponse: {
+            read: components["schemas"]["OrganizationAccessResponse"];
+            write: components["schemas"]["OrganizationAccessResponse"];
+        };
         /** AssignedResource */
         AssignedResource: {
             /**
@@ -1006,6 +1031,17 @@ export interface components {
             /** Permissions */
             permissions: components["schemas"]["Permission"][];
             organization: components["schemas"]["OrganizationSummary"] | null;
+            scope: components["schemas"]["AccessScopeResponse"];
+        };
+        /**
+         * OrganizationAccessResponse
+         * @description Organizaciones alcanzables: todas, o la lista indicada (quizá vacía).
+         */
+        OrganizationAccessResponse: {
+            /** All Organizations */
+            all_organizations: boolean;
+            /** Organization Ids */
+            organization_ids: string[];
         };
         /** OrganizationResponse */
         OrganizationResponse: {
@@ -1041,7 +1077,7 @@ export interface components {
          * Permission
          * @enum {string}
          */
-        Permission: "incidents:read" | "incidents:create" | "incidents:update" | "incidents:close" | "resources:read" | "resources:update_status" | "resources:manage" | "organizations:read" | "assignments:manage" | "assignments:update";
+        Permission: "incidents:read" | "incidents:create" | "incidents:update" | "incidents:update_operational" | "incidents:annotate" | "incidents:change_status" | "incidents:close" | "resources:read" | "resources:update_status" | "resources:manage" | "organizations:read" | "assignments:manage" | "assignments:update";
         /** PointGeometry */
         PointGeometry: {
             /**

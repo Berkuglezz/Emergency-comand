@@ -40,6 +40,7 @@ const KNOWN_ERRORS = [
   "coordinates_incomplete",
   "location_out_of_area",
   "permission_denied",
+  "organization_out_of_scope",
   "validation_error",
   "network_error",
 ] as const

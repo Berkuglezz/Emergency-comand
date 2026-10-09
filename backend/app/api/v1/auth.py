@@ -10,11 +10,11 @@ from fastapi import APIRouter, Cookie, Response, status
 from fastapi.responses import JSONResponse
 
 from app.api.errors import domain_error_response
-from app.api.v1.deps import AuthServiceDep, CurrentUserDep, SettingsDep
+from app.api.v1.deps import AccessScopeDep, AuthServiceDep, CurrentUserDep, SettingsDep
 from app.core.config import Settings
 from app.core.permissions import permissions_for
 from app.domain.exceptions import AuthenticationError
-from app.schemas.auth import LoginRequest, MeResponse, TokenResponse
+from app.schemas.auth import AccessScopeResponse, LoginRequest, MeResponse, TokenResponse
 from app.schemas.errors import ErrorResponse
 from app.schemas.organizations import OrganizationSummary
 from app.services.auth import IssuedTokens
@@ -100,7 +100,8 @@ async def logout(
 
 
 @protected_router.get("/me")
-async def me(user: CurrentUserDep) -> MeResponse:
+async def me(user: CurrentUserDep, scope: AccessScopeDep) -> MeResponse:
+    """Perfil, permisos y ámbito organizativo efectivos del usuario autenticado."""
     return MeResponse(
         id=user.id,
         email=user.email,
@@ -110,4 +111,5 @@ async def me(user: CurrentUserDep) -> MeResponse:
         organization=(
             OrganizationSummary.model_validate(user.organization) if user.organization else None
         ),
+        scope=AccessScopeResponse.from_domain(scope),
     )

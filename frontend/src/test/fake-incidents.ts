@@ -38,6 +38,9 @@ export const INCIDENT_TYPES: Schemas["IncidentTypeResponse"][] = [
 ]
 
 // Copia de prueba del flujo del backend (domain/incident_rules.py).
+/** Campos de la edición operativa (backend: `OPERATIONAL_FIELDS`). */
+const OPERATIONAL_FIELDS = ["description", "affected_people", "location", "details"]
+
 const TRANSITIONS: Record<Status, Status[]> = {
   received: ["assessing", "cancelled"],
   assessing: ["in_progress", "cancelled"],
@@ -158,6 +161,10 @@ export class FakeIncidents {
     if (method === "GET" && path === "/incidents/map") return json(200, this.map(query))
     if (route === "POST /incidents") {
       if (!can("incidents:create")) return error(403, "permission_denied")
+      // Como el backend: elegir la prioridad inicial o el padre exige la edición
+      // completa (D10 y D11).
+      if ((input.priority != null || input.parent_incident_id != null) && !can("incidents:update"))
+        return error(403, "field_not_permitted")
       const stored = this.insert(input as unknown as Schemas["IncidentCreate"], user, false)
       return json(201, this.detail(stored))
     }
@@ -168,12 +175,25 @@ export class FakeIncidents {
     if (route === "GET /incidents/:id") return json(200, this.detail(incident))
     if (route === "GET /incidents/:id/events") return json(200, this.events.get(incident.id) ?? [])
 
-    if (!can("incidents:update")) return error(403, "permission_denied")
-
+    // Como el backend: el permiso se comprueba antes que la versión.
     if (route === "POST /incidents/:id/notes") {
+      if (!can("incidents:annotate")) return error(403, "permission_denied")
       const event = this.record(incident, user, "note_added", { text: input.text })
       return json(201, event)
     }
+    const required =
+      route === "POST /incidents/:id/status"
+        ? "incidents:change_status"
+        : "incidents:update_operational"
+    if (!can(required)) return error(403, "permission_denied")
+    // Edición operativa: cualquier campo enviado fuera de los operativos exige
+    // la edición completa, y la petición se rechaza entera.
+    if (
+      route === "PATCH /incidents/:id" &&
+      !can("incidents:update") &&
+      Object.keys(input).some((field) => field !== "version" && !OPERATIONAL_FIELDS.includes(field))
+    )
+      return error(403, "field_not_permitted")
     if (input.version !== incident.version) return error(409, "version_conflict")
 
     if (route === "POST /incidents/:id/status") {

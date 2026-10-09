@@ -9,6 +9,7 @@ que se deshace al terminar.
 import asyncio
 import os
 import re
+import uuid
 from collections.abc import AsyncIterator, Awaitable, Iterator
 from pathlib import Path
 from typing import Protocol
@@ -179,3 +180,32 @@ async def headers(client: AsyncClient, make_user: UserFactory) -> dict[RoleCode,
         client.cookies.clear()
         result[role] = {"Authorization": f"Bearer {response.json()['access_token']}"}
     return result
+
+
+class MemberHeadersFactory(Protocol):
+    def __call__(self, role: RoleCode, organization_id: uuid.UUID | str) -> Awaitable[Headers]: ...
+
+
+@pytest.fixture
+def member_headers(client: AsyncClient, session: AsyncSession) -> MemberHeadersFactory:
+    """Cabeceras de un usuario nuevo del rol indicado que pertenece a una
+    organización concreta (ámbito organizativo, CLAUDE.md §2.11)."""
+
+    async def _member(role: RoleCode, organization_id: uuid.UUID | str) -> Headers:
+        role_row = (await session.scalars(select(Role).where(Role.code == role))).one()
+        user = User(
+            email=f"{role.value}-{uuid.uuid4().hex[:8]}@example.test",
+            full_name=f"Usuario {role.value} de organización",
+            password_hash=hash_password(TEST_PASSWORD),
+            role=role_row,
+            organization_id=uuid.UUID(str(organization_id)),
+        )
+        session.add(user)
+        await session.commit()
+        response = await client.post(
+            f"{API}/auth/login", json={"email": user.email, "password": TEST_PASSWORD}
+        )
+        client.cookies.clear()
+        return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+    return _member

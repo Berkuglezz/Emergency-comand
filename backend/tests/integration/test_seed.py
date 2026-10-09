@@ -20,12 +20,16 @@ async def _counts(session: AsyncSession) -> tuple[int, int]:
     return users or 0, organizations or 0
 
 
-async def test_seed_creates_one_demo_user_per_role(session: AsyncSession) -> None:
+async def test_seed_creates_the_demo_users(session: AsyncSession) -> None:
     report = await seed(session, DEMO_PASSWORD)
 
     assert len(report.created) == len(USERS) + len(ORGANIZATIONS) + len(RESOURCES) + len(INCIDENTS)
     users = (await session.scalars(select(User).options(selectinload(User.role)))).all()
-    assert sorted(user.role.code for user in users) == sorted(RoleCode)
+    # Todos los roles, y operadores de dos organizaciones y sin organización (§2.11).
+    assert {user.role.code for user in users} == set(RoleCode)
+    operators = [user for user in users if user.role.code == RoleCode.OPERATOR]
+    assert len({user.organization_id for user in operators}) == 3
+    assert any(user.organization_id is None for user in operators)
     for user in users:
         assert user.is_active
         assert user.email.endswith(".test")

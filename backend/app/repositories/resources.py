@@ -20,6 +20,8 @@ class ResourceListQuery:
     statuses: Sequence[ResourceStatus] = ()
     type_code: str | None = None
     organization_id: uuid.UUID | None = None
+    # Ámbito de lectura (CLAUDE.md §2.11): `None` = todas las organizaciones.
+    organization_ids: frozenset[uuid.UUID] | None = None
     municipality: str | None = None
     active_only: bool = True
     search: str | None = None
@@ -112,6 +114,8 @@ class ResourceRepository:
             statement = statement.join(Resource.type).where(ResourceType.code == query.type_code)
         if query.organization_id:
             statement = statement.where(Resource.organization_id == query.organization_id)
+        if query.organization_ids is not None:
+            statement = statement.where(Resource.organization_id.in_(query.organization_ids))
         if query.municipality:
             # Municipio de la base del recurso.
             statement = statement.join(Resource.base).where(

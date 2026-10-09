@@ -7,6 +7,7 @@ from app.domain.exceptions import (
     ConflictError,
     DomainError,
     NotFoundError,
+    OutOfScopeError,
     PermissionDeniedError,
 )
 
@@ -18,6 +19,8 @@ from app.domain.exceptions import (
         (ConflictError("organization_exists"), 409, "organization_exists"),
         (AuthenticationError(), 401, "not_authenticated"),
         (PermissionDeniedError(), 403, "permission_denied"),
+        (PermissionDeniedError("field_not_permitted"), 403, "field_not_permitted"),
+        (OutOfScopeError(), 403, "organization_out_of_scope"),
         (DomainError(), 400, "domain_error"),
     ],
 )

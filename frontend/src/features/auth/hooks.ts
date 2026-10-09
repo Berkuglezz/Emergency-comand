@@ -42,6 +42,20 @@ export function useSessionEndReason(): SessionEndReason | undefined {
   return useQueryClient().getQueryData<SessionEndReason>(queryKeys.sessionEndReason)
 }
 
+/**
+ * ¿Puede el usuario modificar recursos de esta organización? Usa el ámbito que
+ * calcula el backend (`/auth/me`, CLAUDE.md §2.11). Solo UX: el backend lo
+ * vuelve a comprobar y responde 403 `organization_out_of_scope`.
+ */
+export function canWriteOrganization(
+  user: SessionUser | null | undefined,
+  organizationId: string
+): boolean {
+  const write = user?.scope.write
+  if (!write) return false
+  return write.all_organizations || write.organization_ids.includes(organizationId)
+}
+
 /** Con permiso: solo UX. La autorización real la comprueba el backend. */
 export function hasPermission(
   user: SessionUser | null | undefined,

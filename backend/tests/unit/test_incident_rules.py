@@ -5,10 +5,14 @@ from app.domain.incident_rules import (
     ACTIVE_STATUSES,
     ALLOWED_TRANSITIONS,
     CLOSING_STATUSES,
+    CREATE_FIELDS_REQUIRING_FULL_EDIT,
     INITIAL_STATUS,
+    OPERATIONAL_FIELDS,
     PRIORITY_RANK,
     allowed_transitions,
     can_transition,
+    create_fields_requiring_full_edit,
+    fields_requiring_full_edit,
     is_active,
     reachable_statuses,
     status_after_assignment,
@@ -106,3 +110,37 @@ def test_allowed_transitions_match_the_rules_in_enum_order(current: S) -> None:
     targets = allowed_transitions(current)
     assert set(targets) == ALLOWED_TRANSITIONS[current]
     assert targets == sorted(targets, key=list(IncidentStatus).index)
+
+
+# --- Edición operativa (CLAUDE.md §2.11, D6) -----------------------------------------
+
+
+def test_operational_fields_are_the_approved_ones() -> None:
+    assert {"description", "affected_people", "location", "details"} == OPERATIONAL_FIELDS
+
+
+@pytest.mark.parametrize(
+    ("sent", "expected"),
+    [
+        (set(), set()),
+        ({"description", "affected_people", "location", "details"}, set()),
+        ({"priority"}, {"priority"}),
+        ({"title", "description"}, {"title"}),
+        ({"parent_incident_id", "priority", "details"}, {"parent_incident_id", "priority"}),
+    ],
+)
+def test_fields_requiring_full_edit(sent: set[str], expected: set[str]) -> None:
+    assert fields_requiring_full_edit(sent) == expected
+
+
+def test_create_fields_requiring_full_edit() -> None:
+    assert {"priority", "parent_incident_id"} == CREATE_FIELDS_REQUIRING_FULL_EDIT
+    # `None` equivale a no indicarlo: se aplica el valor por defecto.
+    assert (
+        create_fields_requiring_full_edit({"priority": None, "parent_incident_id": None}) == set()
+    )
+    assert create_fields_requiring_full_edit({"priority": "high", "title": "x"}) == {"priority"}
+    assert create_fields_requiring_full_edit({"parent_incident_id": "id", "priority": "low"}) == {
+        "parent_incident_id",
+        "priority",
+    }

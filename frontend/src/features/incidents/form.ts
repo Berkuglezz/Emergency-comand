@@ -209,13 +209,16 @@ export function toCreatePayload(
 export function toUpdatePayload(
   values: IncidentFormValues,
   incident: IncidentDetail,
-  schemaKey: string | null | undefined
+  schemaKey: string | null | undefined,
+  /** Edición operativa (CLAUDE.md §2.11): nunca envía título, prioridad ni padre. */
+  { operationalOnly = false }: { operationalOnly?: boolean } = {}
 ): IncidentUpdate | null {
   const next = toCreatePayload(values, schemaKey)
   const changes: Partial<IncidentUpdate> = {}
 
-  if (next.title !== incident.title) changes.title = next.title
-  if (next.priority && next.priority !== incident.priority) changes.priority = next.priority
+  if (!operationalOnly && next.title !== incident.title) changes.title = next.title
+  if (!operationalOnly && next.priority && next.priority !== incident.priority)
+    changes.priority = next.priority
   // La ubicación se envía completa (sustituye a la anterior) si cambia algo.
   const location = incident.location
   if (
@@ -229,7 +232,7 @@ export function toUpdatePayload(
   if (next.description !== incident.description) changes.description = next.description ?? ""
   if (next.affected_people !== incident.affected_people)
     changes.affected_people = next.affected_people
-  if (next.parent_incident_id !== (incident.parent?.id ?? null))
+  if (!operationalOnly && next.parent_incident_id !== (incident.parent?.id ?? null))
     changes.parent_incident_id = next.parent_incident_id
   const details = next.details ?? {}
   if (!sameDetails(details, incident.details)) changes.details = details

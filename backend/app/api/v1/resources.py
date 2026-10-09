@@ -3,7 +3,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.v1.deps import ResourceServiceDep, require_permission
+from app.api.v1.deps import AccessScopeDep, ResourceServiceDep, require_permission
 from app.core.permissions import Permission
 from app.domain.enums import ResourceStatus
 from app.models import Resource, ResourceAssignment
@@ -83,6 +83,7 @@ async def list_resource_types(service: ResourceServiceDep) -> list[ResourceTypeR
 
 @router.get("", dependencies=_READ)
 async def list_resources(
+    scope: AccessScopeDep,
     service: ResourceServiceDep,
     status_filter: Annotated[list[ResourceStatus] | None, Query(alias="status")] = None,
     type_code: Annotated[str | None, Query(alias="type", max_length=64)] = None,
@@ -94,7 +95,8 @@ async def list_resources(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ResourcePage:
-    """Recursos. Por defecto solo los activos (`active=false` incluye los desactivados)."""
+    """Recursos del ámbito de lectura del usuario (con D4, todas las organizaciones).
+    Por defecto solo los activos (`active=false` incluye los desactivados)."""
     query = ResourceListQuery(
         statuses=status_filter or (),
         type_code=type_code,
@@ -106,7 +108,7 @@ async def list_resources(
         limit=limit,
         offset=offset,
     )
-    items, total = await service.list_resources(query)
+    items, total = await service.list_resources(query, scope)
     current = await service.current_assignments(items)
     return ResourcePage(
         items=[_response(item, current) for item in items],
@@ -122,8 +124,11 @@ async def create_resource(body: ResourceCreate, service: ResourceServiceDep) -> 
 
 
 @router.get("/{resource_id}", dependencies=_READ)
-async def get_resource(resource_id: uuid.UUID, service: ResourceServiceDep) -> ResourceResponse:
-    return await _one(service, await service.get_resource(resource_id))
+async def get_resource(
+    resource_id: uuid.UUID, scope: AccessScopeDep, service: ResourceServiceDep
+) -> ResourceResponse:
+    """Ficha del recurso. Fuera del ámbito de lectura: 404, como si no existiera."""
+    return await _one(service, await service.read_resource(resource_id, scope))
 
 
 @router.patch("/{resource_id}", dependencies=_MANAGE)
@@ -136,6 +141,11 @@ async def update_resource(
 
 @router.post("/{resource_id}/status", dependencies=_UPDATE_STATUS)
 async def change_resource_status(
-    resource_id: uuid.UUID, body: ResourceStatusChange, service: ResourceServiceDep
+    resource_id: uuid.UUID,
+    body: ResourceStatusChange,
+    scope: AccessScopeDep,
+    service: ResourceServiceDep,
 ) -> ResourceResponse:
-    return await _one(service, await service.change_status(resource_id, body))
+    """Estado operativo del recurso. Fuera del ámbito de escritura del usuario:
+    403 `organization_out_of_scope`."""
+    return await _one(service, await service.change_status(resource_id, body, scope))

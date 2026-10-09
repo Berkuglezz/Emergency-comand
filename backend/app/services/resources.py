@@ -5,12 +5,14 @@ La base es una `Location` 1:1. Los recursos no se borran; se desactivan con
 `is_active`.
 """
 
+import dataclasses
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.access_scope import AccessScope
 from app.domain.exceptions import ConflictError, InvalidInputError, NotFoundError
 from app.domain.resource_rules import INITIAL_STATUS, can_change_status
 from app.models import Organization, Resource, ResourceAssignment, ResourceType
@@ -37,8 +39,14 @@ class ResourceService:
     async def list_types(self) -> Sequence[ResourceType]:
         return await self._resources.list_types()
 
-    async def list_resources(self, query: ResourceListQuery) -> tuple[Sequence[Resource], int]:
-        return await self._resources.list(query)
+    async def list_resources(
+        self, query: ResourceListQuery, scope: AccessScope
+    ) -> tuple[Sequence[Resource], int]:
+        """Listado limitado al ámbito de lectura (en la consulta, para que el
+        total y la paginación cuadren)."""
+        return await self._resources.list(
+            dataclasses.replace(query, organization_ids=scope.read.as_filter())
+        )
 
     async def current_assignments(
         self, resources: Sequence[Resource]
@@ -47,9 +55,17 @@ class ResourceService:
         return await self._assignments.current_for_resources(r.id for r in resources)
 
     async def get_resource(self, resource_id: uuid.UUID) -> Resource:
+        """Uso interno (p. ej. la respuesta tras una escritura ya autorizada)."""
         resource = await self._resources.get(resource_id)
         if resource is None:
             raise NotFoundError("resource_not_found")
+        return resource
+
+    async def read_resource(self, resource_id: uuid.UUID, scope: AccessScope) -> Resource:
+        """Ficha para quien la consulta: fuera del ámbito de lectura, 404 igual
+        que si no existiera (D5)."""
+        resource = await self.get_resource(resource_id)
+        scope.require_read(resource.organization_id, not_found="resource_not_found")
         return resource
 
     # --- Escritura ----------------------------------------------------------------
@@ -107,8 +123,15 @@ class ResourceService:
         await commit_or_conflict(self._session)
         return await self.get_resource(resource.id)
 
-    async def change_status(self, resource_id: uuid.UUID, data: ResourceStatusChange) -> Resource:
-        resource = await self._load_for_change(resource_id, data.version)
+    async def change_status(
+        self, resource_id: uuid.UUID, data: ResourceStatusChange, scope: AccessScope
+    ) -> Resource:
+        """Estado operativo del recurso (no el del incidente). Solo dentro del
+        ámbito de escritura del usuario (CLAUDE.md §2.11, D7 y R.4): se comprueba
+        nada más cargarlo, antes que la versión y antes de modificar nada."""
+        resource = await self._lock(resource_id)
+        scope.require_write(resource.organization_id)
+        self._check_version(resource, data.version)
         if not resource.is_active:
             raise InvalidInputError("resource_inactive")
         if not can_change_status(resource.status, data.status):
@@ -124,13 +147,21 @@ class ResourceService:
     # --- Internos -----------------------------------------------------------------
 
     async def _load_for_change(self, resource_id: uuid.UUID, version: int) -> Resource:
+        resource = await self._lock(resource_id)
+        self._check_version(resource, version)
+        return resource
+
+    async def _lock(self, resource_id: uuid.UUID) -> Resource:
         # FOR UPDATE: dos cambios simultáneos sobre el mismo recurso se serializan.
         resource = await self._resources.get(resource_id, for_update=True)
         if resource is None:
             raise NotFoundError("resource_not_found")
+        return resource
+
+    @staticmethod
+    def _check_version(resource: Resource, version: int) -> None:
         if resource.version != version:
             raise ConflictError("version_conflict")
-        return resource
 
     async def _ensure_not_assigned(self, resource: Resource) -> None:
         if await self._assignments.active_for_resource(resource.id) is not None:

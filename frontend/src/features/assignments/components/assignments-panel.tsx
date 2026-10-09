@@ -12,7 +12,7 @@ import { SimulatedPill } from "@/components/ops/simulated-pill"
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import { hasPermission, useSession } from "@/features/auth/hooks"
+import { canWriteOrganization, hasPermission, useSession } from "@/features/auth/hooks"
 import type { IncidentDetail } from "@/features/incidents/types"
 import { ResourceTypeLabel } from "@/features/resources/components/resource-badges"
 
@@ -153,38 +153,47 @@ export function AssignmentsPanel({ incident, onReload }: AssignmentsPanelProps) 
                     <AssignmentSummary assignment={assignment} />
                   </div>
                   <div className="flex gap-1">
-                    {canUpdate && !assignment.arrived_at && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={arrival.isPending}
-                        aria-label={t("assignments.markArrivalFor", {
-                          code: assignment.resource.code,
-                        })}
-                        onClick={() => {
-                          release.reset()
-                          arrival.mutate({ assignmentId: assignment.id, version: incident.version })
-                        }}
-                      >
-                        <MapPinCheck data-icon="inline-start" aria-hidden />
-                        {t("assignments.markArrival")}
-                      </Button>
-                    )}
-                    {canManage && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        aria-label={t("assignments.releaseFor", { code: assignment.resource.code })}
-                        onClick={() => {
-                          arrival.reset()
-                          setReason("")
-                          setReleasing(assignment)
-                        }}
-                      >
-                        <LogOut data-icon="inline-start" aria-hidden />
-                        {t("assignments.release")}
-                      </Button>
-                    )}
+                    {canUpdate &&
+                      !assignment.arrived_at &&
+                      // Solo recursos de su ámbito (CLAUDE.md §2.11, D9).
+                      canWriteOrganization(user, assignment.resource.organization.id) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={arrival.isPending}
+                          aria-label={t("assignments.markArrivalFor", {
+                            code: assignment.resource.code,
+                          })}
+                          onClick={() => {
+                            release.reset()
+                            arrival.mutate({
+                              assignmentId: assignment.id,
+                              version: incident.version,
+                            })
+                          }}
+                        >
+                          <MapPinCheck data-icon="inline-start" aria-hidden />
+                          {t("assignments.markArrival")}
+                        </Button>
+                      )}
+                    {canManage &&
+                      canWriteOrganization(user, assignment.resource.organization.id) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          aria-label={t("assignments.releaseFor", {
+                            code: assignment.resource.code,
+                          })}
+                          onClick={() => {
+                            arrival.reset()
+                            setReason("")
+                            setReleasing(assignment)
+                          }}
+                        >
+                          <LogOut data-icon="inline-start" aria-hidden />
+                          {t("assignments.release")}
+                        </Button>
+                      )}
                   </div>
                 </li>
               ))}

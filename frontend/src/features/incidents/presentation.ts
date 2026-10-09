@@ -83,6 +83,7 @@ const KNOWN_ERRORS = [
   "incident_type_not_found",
   "incident_not_found",
   "permission_denied",
+  "field_not_permitted",
   "validation_error",
   "network_error",
 ] as const

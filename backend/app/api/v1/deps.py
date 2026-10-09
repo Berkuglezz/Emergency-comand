@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.permissions import Permission, has_permission
 from app.db.session import get_session
+from app.domain.access_scope import AccessScope, scope_for
 from app.domain.exceptions import PermissionDeniedError
 from app.models import User
 from app.repositories.health import DatabaseHealthRepository
@@ -81,6 +82,18 @@ async def get_current_user(
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+def get_access_scope(user: CurrentUserDep) -> AccessScope:
+    """Ámbito organizativo del usuario autenticado (CLAUDE.md §2.11).
+
+    Se deriva del rol y de `organization_id`, sin consultas adicionales.
+    Todavía no lo usa ninguna ruta: los servicios lo aplicarán en R.4 a R.6.
+    """
+    return scope_for(user.role.code, user.organization_id)
+
+
+AccessScopeDep = Annotated[AccessScope, Depends(get_access_scope)]
 
 
 def require_permission(permission: Permission) -> Callable[[User], Awaitable[User]]:

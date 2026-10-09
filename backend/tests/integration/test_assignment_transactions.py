@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
 from app.db.session import get_sessionmaker
+from app.domain.access_scope import AccessScope, OrganizationAccess
 from app.domain.enums import (
     IncidentEventType,
     IncidentStatus,
@@ -44,6 +45,12 @@ from app.schemas.incidents import IncidentCreate, IncidentStatusChange
 from app.schemas.locations import LocationInput
 from app.services.assignments import AssignmentService
 from app.services.incidents import IncidentService
+
+# Estas pruebas miden concurrencia, no ámbito: quien asigna alcanza a todas
+# las organizaciones (como admin y coordinador, CLAUDE.md §2.11, D1).
+WHOLE_CENTRAL = AccessScope(
+    read=OrganizationAccess.everything(), write=OrganizationAccess.everything()
+)
 
 
 @dataclass(frozen=True)
@@ -136,6 +143,7 @@ async def test_concurrent_assignments_of_one_resource_let_only_one_win(
                     incident_id,
                     AssignmentCreate(resource_id=scenario.resource_id, version=1),
                     actor,
+                    WHOLE_CENTRAL,
                 )
             except ConflictError as exc:
                 return exc.code
@@ -187,6 +195,7 @@ async def _assign_to_origin(scenario: Scenario) -> int:
             origin,
             AssignmentCreate(resource_id=scenario.resource_id, version=1),
             await _actor(session, scenario.user_id),
+            WHOLE_CENTRAL,
         )
     async with get_sessionmaker()() as session:
         incident = await session.get(Incident, origin)
@@ -213,6 +222,7 @@ async def test_reassign_locks_incidents_before_the_resource(scenario: Scenario) 
                 target,
                 AssignmentCreate(resource_id=scenario.resource_id, version=1, reassign=True),
                 await _actor(session, scenario.user_id),
+                WHOLE_CENTRAL,
             )
 
     async with maker() as holder:
@@ -260,6 +270,7 @@ async def test_concurrent_close_and_reassign_end_consistently(
                 target,
                 AssignmentCreate(resource_id=scenario.resource_id, version=1, reassign=True),
                 await _actor(session, scenario.user_id),
+                WHOLE_CENTRAL,
             )
 
     closed, reassigned = await asyncio.gather(_outcome(close()), _outcome(reassign()))

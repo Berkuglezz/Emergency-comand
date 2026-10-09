@@ -48,8 +48,8 @@ describe("listado de incidentes", () => {
     // Orden por prioridad que devuelve la API.
     const codes = screen.getAllByRole("link", { name: /^INC-/ }).map((link) => link.textContent)
     expect(codes).toEqual(["INC-000001", "INC-000002"])
-    // El operador puede consultar, pero no dar de alta.
-    expect(screen.queryByText("Nuevo incidente")).not.toBeInTheDocument()
+    // El operador registra incidentes (CLAUDE.md §2.11).
+    expect(screen.getByText("Nuevo incidente")).toBeInTheDocument()
   })
 
   it("guarda los filtros en la URL y los envía a la API", async () => {
@@ -122,7 +122,7 @@ describe("listado de incidentes", () => {
 })
 
 describe("detalle de incidente", () => {
-  it("muestra cabecera, historial con el sistema como actor y sin acciones para operator", async () => {
+  it("muestra cabecera e historial; el operador no cambia el estado", async () => {
     const incident = backend.incidents.add({ title: "Temporal de prueba", priority: "high" })
     backend.incidents.add({ title: "Hijo de prueba", parentCode: incident.code })
     backend.startSessionFor("operator")
@@ -136,10 +136,33 @@ describe("detalle de incidente", () => {
     expect(screen.getByText("Sistema")).toBeInTheDocument()
     // Relación padre/hijo.
     expect(screen.getByRole("link", { name: "INC-000002" })).toBeInTheDocument()
-    // Sin `incidents:update`: ni acciones, ni edición, ni notas.
+    // Sin `incidents:change_status`: sin cambios de estado. Con
+    // `incidents:update_operational` y `incidents:annotate`: edición operativa y notas.
     expect(screen.queryByRole("button", { name: "Pasar a valoración" })).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Editar" })).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Añadir nota" })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Editar" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Añadir nota" })).toBeInTheDocument()
+  })
+
+  it("el operador edita solo los campos operativos", async () => {
+    const incident = backend.incidents.add({ title: "Para el operador", priority: "high" })
+    backend.startSessionFor("operator")
+    const { user } = renderApp(`/incidents/${incident.id}`)
+    await screen.findByRole("heading", { name: "Para el operador" })
+
+    await user.click(screen.getByRole("button", { name: "Editar" }))
+    // Título y prioridad se ven, pero no se pueden cambiar; el padre no aparece.
+    expect(screen.queryByLabelText("Título")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Prioridad")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Incidente padre")).not.toBeInTheDocument()
+    expect(screen.getAllByText("Solo la coordinación puede cambiarlo.")).toHaveLength(2)
+
+    await user.type(screen.getByLabelText("Personas afectadas"), "4")
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+
+    await screen.findByRole("button", { name: "Editar" })
+    const patch = backend.calls.find((call) => call.method === "PATCH")
+    expect(patch?.body).toEqual({ affected_people: 4, version: 1 })
+    expect(backend.incidents.byCode(incident.code).priority).toBe("high")
   })
 
   it("ofrece solo las transiciones que permite el backend y aplica el cambio", async () => {
@@ -317,11 +340,23 @@ describe("alta de incidente", () => {
     expect(await screen.findByText("Introduce un valor entre 0 y 100000.")).toBeInTheDocument()
   })
 
-  it("operator no puede abrir el alta", async () => {
+  it("el operador registra un incidente", async () => {
     backend.startSessionFor("operator")
-    renderApp("/incidents/new")
+    const { user } = renderApp("/incidents/new")
 
-    expect(await screen.findByText("Acceso no permitido")).toBeInTheDocument()
-    expect(backend.calls.filter((call) => call.path === "/incident-types")).toHaveLength(0)
+    await user.selectOptions(await screen.findByLabelText("Tipo de incidente"), "Incendio forestal")
+    // Sin selector de prioridad: se aplica la del tipo.
+    expect(screen.queryByLabelText("Prioridad")).not.toBeInTheDocument()
+    expect(screen.getByText("Alta (por defecto del tipo)")).toBeInTheDocument()
+    await user.type(screen.getByLabelText("Título"), "Aviso del operador")
+    await user.type(screen.getByLabelText("Municipio"), "Siero")
+    await user.click(screen.getByRole("button", { name: "Registrar incidente" }))
+
+    expect(await screen.findByRole("heading", { name: "Aviso del operador" })).toBeInTheDocument()
+    const post = backend.calls.find((call) => call.method === "POST" && call.path === "/incidents")
+    expect(post?.body).toMatchObject({ priority: null })
+    // Sin cambios de estado del incidente para el operador, pero sí notas.
+    expect(screen.queryByRole("button", { name: "Pasar a valoración" })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Añadir nota" })).toBeInTheDocument()
   })
 })

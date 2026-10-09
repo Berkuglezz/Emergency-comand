@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import RoleCode
 from app.models import IncidentType, Organization, ResourceType
-from tests.conftest import API, Headers
+from tests.conftest import API, Headers, MemberHeadersFactory
 
 OVIEDO = {"latitude": 43.3614, "longitude": -5.8494}
 GIJON = {"latitude": 43.5357, "longitude": -5.6615}
@@ -365,17 +365,18 @@ async def test_a_resource_has_one_active_assignment(
 async def test_arrival_does_not_change_incident_status(
     client: AsyncClient,
     headers: dict[RoleCode, Headers],
+    member_headers: MemberHeadersFactory,
     setup: tuple[dict[str, Any], dict[str, Any], str],
 ) -> None:
-    incident, resource, _ = setup
+    incident, resource, organization = setup
+    # Operador de la organización del recurso (ámbito, CLAUDE.md §2.11, D9).
+    operator = await member_headers(RoleCode.OPERATOR, organization)
     detail = (await _assign(client, headers[RoleCode.ADMIN], incident, resource)).json()
     (assignment,) = await _assignments(client, headers[RoleCode.ADMIN], incident)
     path = f"{API}/assignments/{assignment['id']}/arrival"
 
     # El operador puede marcar la llegada.
-    response = await client.post(
-        path, json={"version": detail["version"]}, headers=headers[RoleCode.OPERATOR]
-    )
+    response = await client.post(path, json={"version": detail["version"]}, headers=operator)
 
     assert response.status_code == 200, response.text
     arrived = response.json()
@@ -386,9 +387,7 @@ async def test_arrival_does_not_change_incident_status(
     events = await _events(client, headers[RoleCode.ADMIN], incident)
     assert events[-1]["event_type"] == "resource_arrived"
 
-    twice = await client.post(
-        path, json={"version": arrived["version"]}, headers=headers[RoleCode.OPERATOR]
-    )
+    twice = await client.post(path, json={"version": arrived["version"]}, headers=operator)
     assert twice.json() == {"detail": "assignment_already_arrived"}
 
 
@@ -576,9 +575,11 @@ async def test_closing_an_incident_releases_its_resources(
 async def test_assigned_resource_status_and_activation_are_blocked(
     client: AsyncClient,
     headers: dict[RoleCode, Headers],
+    member_headers: MemberHeadersFactory,
     setup: tuple[dict[str, Any], dict[str, Any], str],
 ) -> None:
-    incident, resource, _ = setup
+    incident, resource, organization = setup
+    operator = await member_headers(RoleCode.OPERATOR, organization)
     admin = headers[RoleCode.ADMIN]
     assert (await _assign(client, admin, incident, resource)).status_code == 200
     current = await _get(client, admin, f"resources/{resource['id']}")
@@ -587,7 +588,7 @@ async def test_assigned_resource_status_and_activation_are_blocked(
         response = await client.post(
             f"{API}/resources/{resource['id']}/status",
             json={"status": target, "version": current["version"]},
-            headers=headers[RoleCode.OPERATOR],
+            headers=operator,
         )
         assert response.json() == {"detail": "resource_assigned"}
     deactivate = await client.patch(

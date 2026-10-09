@@ -24,6 +24,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.access_scope import AccessScope
 from app.domain.assignment_rules import (
     USER_RELEASE_REASONS,
     assignment_blocker,
@@ -153,14 +154,18 @@ class AssignmentService:
         type_code: str | None,
         organization_id: uuid.UUID | None,
         include_assigned: bool,
+        scope: AccessScope,
     ) -> list[Candidate]:
         """Recursos asignables ordenados por ETA estimada (sin estimación, al
-        final). Es ayuda a la decisión: no se preselecciona ninguno."""
+        final). Es ayuda a la decisión: no se preselecciona ninguno. Solo
+        recursos del ámbito de escritura: los que el usuario podría asignar."""
         incident = await self._incidents.get(incident_id)
         if incident is None:
             raise NotFoundError("incident_not_found")
         resources = await self._assignments.candidate_resources(
-            type_code=type_code, organization_id=organization_id
+            type_code=type_code,
+            organization_id=organization_id,
+            organization_ids=scope.write.as_filter(),
         )
         current = await self._assignments.current_for_resources(r.id for r in resources)
         suggested_types = set(incident.type.suggested_resource_types)
@@ -198,9 +203,12 @@ class AssignmentService:
     # --- Escritura ----------------------------------------------------------------
 
     async def assign(
-        self, incident_id: uuid.UUID, data: AssignmentCreate, actor: User
+        self, incident_id: uuid.UUID, data: AssignmentCreate, actor: User, scope: AccessScope
     ) -> uuid.UUID:
-        """Asigna un recurso. Devuelve el id del incidente."""
+        """Asigna (o reasigna) un recurso. Devuelve el id del incidente.
+
+        El recurso debe estar en el ámbito de escritura del usuario (CLAUDE.md
+        §2.11, R.5); se comprueba tras bloquearlo y antes de modificar nada."""
         # Para respetar el orden de bloqueos, primero se mira (sin bloquear) a qué
         # incidente está asignado el recurso; se bloquean los incidentes
         # implicados y después todo se vuelve a comprobar con los bloqueos tomados.
@@ -213,6 +221,7 @@ class AssignmentService:
         resource = await self._resources.get(data.resource_id, for_update=True)
         if resource is None:
             raise NotFoundError("resource_not_found")
+        scope.require_write(resource.organization_id)
         current = await self._assignments.active_for_resource(resource.id, for_update=True)
         now = datetime.now(UTC)
         events = EventRecorder(self._incidents, actor, now)
@@ -280,15 +289,19 @@ class AssignmentService:
         return incident.id
 
     async def arrive(
-        self, assignment_id: uuid.UUID, data: AssignmentArrival, actor: User
+        self, assignment_id: uuid.UUID, data: AssignmentArrival, actor: User, scope: AccessScope
     ) -> uuid.UUID:
-        """Marca que el recurso ha llegado. No cambia el estado del incidente."""
+        """Marca que el recurso ha llegado. No cambia el estado del incidente.
+
+        Solo para recursos dentro del ámbito de escritura del usuario
+        (CLAUDE.md §2.11, D9 y R.4), comprobado antes de modificar nada."""
         assignment, incident = await self._load_assignment(assignment_id, data.version)
-        if assignment.arrived_at is not None:
-            raise InvalidInputError("assignment_already_arrived")
         resource = await self._resources.get(assignment.resource_id)
         if resource is None:  # pragma: no cover — lo impide la clave foránea
             raise NotFoundError("resource_not_found")
+        scope.require_write(resource.organization_id)
+        if assignment.arrived_at is not None:
+            raise InvalidInputError("assignment_already_arrived")
         now = datetime.now(UTC)
         assignment.arrived_at = now
         EventRecorder(self._incidents, actor, now).record(
@@ -301,15 +314,17 @@ class AssignmentService:
         return incident.id
 
     async def release(
-        self, assignment_id: uuid.UUID, data: AssignmentRelease, actor: User
+        self, assignment_id: uuid.UUID, data: AssignmentRelease, actor: User, scope: AccessScope
     ) -> uuid.UUID:
-        """Retira un recurso con un motivo elegido por la persona."""
+        """Retira un recurso con un motivo elegido por la persona. El recurso debe
+        estar en el ámbito de escritura del usuario (R.5)."""
         if data.reason not in USER_RELEASE_REASONS:
             raise InvalidInputError("invalid_release_reason")
         assignment, incident = await self._load_assignment(assignment_id, data.version)
         resource = await self._resources.get(assignment.resource_id, for_update=True)
         if resource is None:  # pragma: no cover — lo impide la clave foránea
             raise NotFoundError("resource_not_found")
+        scope.require_write(resource.organization_id)
         active = await self._assignments.active_for_incident(incident.id)
         now = datetime.now(UTC)
         release(

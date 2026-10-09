@@ -5,6 +5,8 @@
  */
 import type { components } from "@/types/api"
 
+import { canWrite } from "./fake-scope"
+
 type Schemas = components["schemas"]
 type Resource = Schemas["ResourceResponse"]
 type Status = Schemas["ResourceStatus"]
@@ -39,6 +41,8 @@ export interface ResourceSeed {
   isActive?: boolean
   /** Coordenadas de la base (latitud, longitud). */
   base?: { latitude: number; longitude: number }
+  /** Organización del recurso (por defecto, la de los usuarios de prueba). */
+  organization?: Schemas["OrganizationSummary"]
 }
 
 export class FakeResources {
@@ -62,7 +66,7 @@ export class FakeResources {
       code: seed.code,
       name: seed.name ?? `${seed.code} (simulado)`,
       type,
-      organization: this.organization,
+      organization: seed.organization ?? this.organization,
       status: seed.status ?? "available",
       status_changed_at: now,
       base: {
@@ -142,6 +146,8 @@ export class FakeResources {
 
     if (route === "POST /resources/:id/status") {
       if (!can("resources:update_status")) return error(403, "permission_denied")
+      // Como el backend: el ámbito, antes que la versión (CLAUDE.md §2.11, R.4).
+      if (!canWrite(user, resource.organization.id)) return error(403, "organization_out_of_scope")
       if (input.version !== resource.version) return error(409, "version_conflict")
       if (!resource.is_active) return error(422, "resource_inactive")
       if (input.status === resource.status) return error(422, "invalid_transition")

@@ -104,7 +104,9 @@ async def _seed_users(
     }
     for fixture in USERS:
         role = roles[fixture.role]
-        organization = organizations[fixture.organization_code]
+        organization_id = (
+            organizations[fixture.organization_code].id if fixture.organization_code else None
+        )
         user = existing.get(fixture.email)
         if user is None:
             session.add(
@@ -113,14 +115,14 @@ async def _seed_users(
                     full_name=fixture.full_name,
                     password_hash=hash_password(demo_password),
                     role_id=role.id,
-                    organization_id=organization.id,
+                    organization_id=organization_id,
                 )
             )
             report.created.append(f"user:{fixture.email}")
             continue
 
         changed = False
-        expected = (fixture.full_name, role.id, organization.id, True)
+        expected = (fixture.full_name, role.id, organization_id, True)
         if (user.full_name, user.role_id, user.organization_id, user.is_active) != expected:
             user.full_name, user.role_id, user.organization_id, user.is_active = expected
             changed = True

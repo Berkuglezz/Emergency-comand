@@ -10,7 +10,14 @@ import { PRIORITY_CODES } from "@/components/ops/priority"
 import { Button } from "@/components/ui/button"
 import { useCodeLabel } from "@/lib/code-label"
 import { fieldProps } from "@/lib/form-a11y"
-import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
@@ -34,6 +41,16 @@ interface IncidentFormProps {
   incidentId?: string
   /** Un incidente con hijos no puede pasar a ser hijo (un solo nivel). */
   hasChildren?: boolean
+  /**
+   * Sin `incidents:update` (CLAUDE.md §2.11): la prioridad no se elige. En el
+   * alta se aplica la del tipo; en la edición se muestra sin poder cambiarla.
+   * El backend lo exige igualmente.
+   */
+  canSetPriority?: boolean
+  /** Sin `incidents:update` no se elige el incidente padre (D11); el backend lo exige. */
+  canSetParent?: boolean
+  /** Edición operativa: título y padre se muestran sin poder cambiarlos. */
+  operationalOnly?: boolean
   pending: boolean
   submitLabel: string
   pendingLabel: string
@@ -49,6 +66,9 @@ export function IncidentForm({
   defaultValues,
   incidentId,
   hasChildren = false,
+  canSetPriority = true,
+  canSetParent = true,
+  operationalOnly = false,
   pending,
   submitLabel,
   pendingLabel,
@@ -120,40 +140,59 @@ export function IncidentForm({
           </Field>
         )}
 
-        <FormField id={`${id}-title`} label={t("incidents.fields.title")} error={errors.title}>
-          <Input
-            maxLength={200}
-            {...fieldProps(`${id}-title`, errors.title)}
-            {...form.register("title")}
-          />
-        </FormField>
+        {operationalOnly ? (
+          <ReadOnlyField label={t("incidents.fields.title")} value={defaultValues.title} />
+        ) : (
+          <FormField id={`${id}-title`} label={t("incidents.fields.title")} error={errors.title}>
+            <Input
+              maxLength={200}
+              {...fieldProps(`${id}-title`, errors.title)}
+              {...form.register("title")}
+            />
+          </FormField>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField
-            id={`${id}-priority`}
-            label={t("incidents.fields.priority")}
-            error={errors.priority}
-          >
-            <NativeSelect
-              {...fieldProps(`${id}-priority`, errors.priority)}
-              {...form.register("priority")}
+          {!canSetPriority ? (
+            <ReadOnlyField
+              label={t("incidents.fields.priority")}
+              value={
+                mode === "create"
+                  ? t("incidents.fields.priorityByType", {
+                      priority: selectedType ? t(`priority.${selectedType.default_priority}`) : "—",
+                    })
+                  : defaultValues.priority
+                    ? t(`priority.${defaultValues.priority}`)
+                    : "—"
+              }
+            />
+          ) : (
+            <FormField
+              id={`${id}-priority`}
+              label={t("incidents.fields.priority")}
+              error={errors.priority}
             >
-              {mode === "create" && (
-                <NativeSelectOption value="">
-                  {selectedType
-                    ? t("incidents.fields.priorityDefaultWith", {
-                        priority: t(`priority.${selectedType.default_priority}`),
-                      })
-                    : t("incidents.fields.priorityDefaultWith", { priority: "—" })}
-                </NativeSelectOption>
-              )}
-              {PRIORITY_CODES.map((code) => (
-                <NativeSelectOption key={code} value={code}>
-                  {t(`priority.${code}`)}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </FormField>
+              <NativeSelect
+                {...fieldProps(`${id}-priority`, errors.priority)}
+                {...form.register("priority")}
+              >
+                {mode === "create" && (
+                  <NativeSelectOption value="">
+                    {selectedType
+                      ? t("incidents.fields.priorityDefaultWith", {
+                          priority: t(`priority.${selectedType.default_priority}`),
+                        })
+                      : t("incidents.fields.priorityDefaultWith", { priority: "—" })}
+                  </NativeSelectOption>
+                )}
+                {PRIORITY_CODES.map((code) => (
+                  <NativeSelectOption key={code} value={code}>
+                    {t(`priority.${code}`)}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </FormField>
+          )}
           <FormField
             id={`${id}-affected`}
             label={t("incidents.fields.affectedPeople")}
@@ -275,25 +314,27 @@ export function IncidentForm({
           </FieldSet>
         )}
 
-        <FormField
-          id={`${id}-parent`}
-          label={t("incidents.fields.parent")}
-          description={t("incidents.fields.parentHint")}
-          error={errors.parent_incident_id}
-        >
-          <NativeSelect
-            disabled={hasChildren}
-            {...fieldProps(`${id}-parent`, errors.parent_incident_id)}
-            {...form.register("parent_incident_id")}
+        {!operationalOnly && canSetParent && (
+          <FormField
+            id={`${id}-parent`}
+            label={t("incidents.fields.parent")}
+            description={t("incidents.fields.parentHint")}
+            error={errors.parent_incident_id}
           >
-            <NativeSelectOption value="">{t("incidents.fields.noParent")}</NativeSelectOption>
-            {parentOptions.map((incident) => (
-              <NativeSelectOption key={incident.id} value={incident.id}>
-                {incident.code} · {incident.title}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </FormField>
+            <NativeSelect
+              disabled={hasChildren}
+              {...fieldProps(`${id}-parent`, errors.parent_incident_id)}
+              {...form.register("parent_incident_id")}
+            >
+              <NativeSelectOption value="">{t("incidents.fields.noParent")}</NativeSelectOption>
+              {parentOptions.map((incident) => (
+                <NativeSelectOption key={incident.id} value={incident.id}>
+                  {incident.code} · {incident.title}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </FormField>
+        )}
 
         {error}
 
@@ -307,5 +348,17 @@ export function IncidentForm({
         </div>
       </FieldGroup>
     </form>
+  )
+}
+
+/** Campo que el rol no puede cambiar: se muestra, con el motivo. */
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  const { t } = useTranslation()
+  return (
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
+      <p>{value}</p>
+      <FieldDescription>{t("incidents.fields.coordinationOnly")}</FieldDescription>
+    </Field>
   )
 }

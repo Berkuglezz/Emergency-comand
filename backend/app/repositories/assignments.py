@@ -106,8 +106,10 @@ class AssignmentRepository:
         *,
         type_code: str | None,
         organization_id: uuid.UUID | None,
+        organization_ids: frozenset[uuid.UUID] | None = None,
     ) -> Sequence[Resource]:
-        """Recursos activos que no están fuera de servicio, con tipo y base."""
+        """Recursos activos que no están fuera de servicio, con tipo y base.
+        `organization_ids` limita a esas organizaciones (ámbito); `None`, a todas."""
         statement = (
             select(Resource)
             .where(Resource.is_active.is_(True))
@@ -121,4 +123,6 @@ class AssignmentRepository:
             statement = statement.join(Resource.type).where(ResourceType.code == type_code)
         if organization_id:
             statement = statement.where(Resource.organization_id == organization_id)
+        if organization_ids is not None:
+            statement = statement.where(Resource.organization_id.in_(organization_ids))
         return (await self._session.scalars(statement)).unique().all()

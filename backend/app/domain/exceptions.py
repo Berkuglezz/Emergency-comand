@@ -35,6 +35,14 @@ class PermissionDeniedError(DomainError):
     code = "permission_denied"
 
 
+class OutOfScopeError(PermissionDeniedError):
+    """El usuario tiene el permiso, pero el recurso pertenece a una organización
+    fuera de su ámbito de escritura (CLAUDE.md §2.11). Se traduce a 403, como
+    toda denegación de permiso."""
+
+    code = "organization_out_of_scope"
+
+
 class InvalidInputError(DomainError):
     """Entrada válida en forma pero no según las reglas de dominio
     (p. ej. `details` que no cumple el esquema del tipo)."""

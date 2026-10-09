@@ -40,7 +40,11 @@ _ERRORS: dict[int | str, dict[str, Any]] = {
 
 _READ = [Depends(require_permission(Permission.INCIDENTS_READ))]
 _CREATE = [Depends(require_permission(Permission.INCIDENTS_CREATE))]
-_UPDATE = [Depends(require_permission(Permission.INCIDENTS_UPDATE))]
+# La edición exige al menos la operativa; los campos que no lo son exigen
+# además `incidents:update`, y eso lo comprueba el servicio (depende del cuerpo).
+_EDIT = [Depends(require_permission(Permission.INCIDENTS_UPDATE_OPERATIONAL))]
+_CHANGE_STATUS = [Depends(require_permission(Permission.INCIDENTS_CHANGE_STATUS))]
+_ANNOTATE = [Depends(require_permission(Permission.INCIDENTS_ANNOTATE))]
 
 types_router = APIRouter(prefix="/incident-types", tags=["incidents"], responses=_ERRORS)
 router = APIRouter(prefix="/incidents", tags=["incidents"], responses=_ERRORS)
@@ -184,14 +188,14 @@ async def get_incident(incident_id: uuid.UUID, service: IncidentServiceDep) -> I
     return incident_detail(await service.get_incident(incident_id))
 
 
-@router.patch("/{incident_id}", dependencies=_UPDATE)
+@router.patch("/{incident_id}", dependencies=_EDIT)
 async def update_incident(
     incident_id: uuid.UUID, body: IncidentUpdate, user: CurrentUserDep, service: IncidentServiceDep
 ) -> IncidentDetail:
     return incident_detail(await service.update_incident(incident_id, body, user))
 
 
-@router.post("/{incident_id}/status", dependencies=_UPDATE)
+@router.post("/{incident_id}/status", dependencies=_CHANGE_STATUS)
 async def change_incident_status(
     incident_id: uuid.UUID,
     body: IncidentStatusChange,
@@ -210,7 +214,7 @@ async def list_incident_events(
     return [_event(event, actor) for event, actor in await service.list_events(incident_id)]
 
 
-@router.post("/{incident_id}/notes", status_code=status.HTTP_201_CREATED, dependencies=_UPDATE)
+@router.post("/{incident_id}/notes", status_code=status.HTTP_201_CREATED, dependencies=_ANNOTATE)
 async def add_incident_note(
     incident_id: uuid.UUID,
     body: IncidentNoteCreate,

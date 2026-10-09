@@ -91,7 +91,7 @@ function SelectedIncident({
   if (incident.isPending) status = "loading"
   else if (incident.isError) status = "error"
   const data = incident.data
-  const canUpdate = hasPermission(user, "incidents:update")
+  const canChangeStatus = hasPermission(user, "incidents:change_status")
   // Lo más reciente primero: en el panel interesa qué acaba de pasar.
   const lastEvents = (events.data ?? []).slice(-LAST_EVENTS).reverse()
 
@@ -144,7 +144,7 @@ function SelectedIncident({
               <IncidentTypeLabel type={data.type} className="text-muted-foreground" />
             </div>
 
-            {canUpdate && (
+            {canChangeStatus && (
               <IncidentStatusActions
                 incident={data}
                 canClose={hasPermission(user, "incidents:close")}

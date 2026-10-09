@@ -28,6 +28,8 @@ from app.domain.incident_rules import (
     INITIAL_STATUS,
     TERMINAL_STATUSES,
     can_transition,
+    create_fields_requiring_full_edit,
+    fields_requiring_full_edit,
 )
 from app.models import Incident, IncidentEvent, IncidentType, User
 from app.repositories.assignments import AssignmentRepository
@@ -123,6 +125,14 @@ class IncidentService:
     # --- Escritura ----------------------------------------------------------------
 
     async def create_incident(self, data: IncidentCreate, actor: User) -> IncidentView:
+        # Elegir la prioridad inicial o el incidente padre son decisiones de
+        # coordinación (§2.11, D10 y D11): sin la edición completa, el alta toma
+        # la prioridad del tipo y ningún padre, y una petición que los indique
+        # se rechaza antes de crear nada.
+        if create_fields_requiring_full_edit(
+            {"priority": data.priority, "parent_incident_id": data.parent_incident_id}
+        ) and not has_permission(actor.role.code, Permission.INCIDENTS_UPDATE):
+            raise PermissionDeniedError("field_not_permitted")
         incident_type = await self._incidents.get_type(data.type_id)
         if incident_type is None or not incident_type.is_active:
             raise InvalidInputError("incident_type_not_found")
@@ -165,12 +175,21 @@ class IncidentService:
         self, incident_id: uuid.UUID, data: IncidentUpdate, actor: User
     ) -> IncidentView:
         """Edición parcial. Si ningún valor cambia de verdad, no se escribe nada:
-        ni `IncidentEvent` ni incremento de `version`."""
+        ni `IncidentEvent` ni incremento de `version`.
+
+        Con solo la edición operativa, cualquier campo fuera de
+        `OPERATIONAL_FIELDS` rechaza la petición entera (403
+        `field_not_permitted`) antes de leer o modificar nada."""
+        sent = data.model_fields_set - {"version"}
+        if fields_requiring_full_edit(sent) and not has_permission(
+            actor.role.code, Permission.INCIDENTS_UPDATE
+        ):
+            raise PermissionDeniedError("field_not_permitted")
+
         incident = await self._load_for_change(incident_id, data.version)
         if incident.status in TERMINAL_STATUSES:
             raise InvalidInputError("incident_closed")
 
-        sent = data.model_fields_set - {"version"}
         if any(getattr(data, name) is None for name in sent & _NOT_NULLABLE):
             raise InvalidInputError("field_not_nullable")
 

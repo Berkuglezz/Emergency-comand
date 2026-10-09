@@ -245,7 +245,8 @@
       "validation_error": "Revisa los datos enviados.",
       "network_error": "No se puede contactar con el servidor.",
       "unexpected": "Se ha producido un error inesperado. Inténtalo de nuevo.",
-      "concurrent_update": "Otra operación simultánea ha impedido guardar el cambio. No se ha guardado nada: recarga y vuelve a intentarlo."
+      "concurrent_update": "Otra operación simultánea ha impedido guardar el cambio. No se ha guardado nada: recarga y vuelve a intentarlo.",
+      "organization_out_of_scope": "Este recurso pertenece a otra organización: tu rol solo puede modificar los recursos de la tuya. No se ha guardado nada."
     }
   },
   "organizations": {
@@ -309,6 +310,8 @@
       "title": "Título",
       "description": "Descripción",
       "priority": "Prioridad",
+      "priorityByType": "{{priority}} (por defecto del tipo)",
+      "coordinationOnly": "Solo la coordinación puede cambiarlo.",
       "priorityDefaultWith": "Por defecto del tipo ({{priority}})",
       "municipality": "Municipio",
       "locationDescription": "Ubicación",
@@ -422,6 +425,7 @@
       "incident_type_not_found": "El tipo de incidente no existe o está inactivo.",
       "incident_not_found": "El incidente no existe.",
       "permission_denied": "Tu rol no tiene permiso para esta acción.",
+      "field_not_permitted": "Tu rol no puede cambiar alguno de los campos enviados (prioridad, título o incidente padre). No se ha guardado nada.",
       "validation_error": "Hay datos no válidos en el formulario.",
       "network_error": "No se puede contactar con el servidor. Comprueba la conexión.",
       "unexpected": "Se ha producido un error inesperado. Inténtalo de nuevo.",
@@ -580,7 +584,8 @@
         "title": "El recurso ha cambiado",
         "description": "Otra persona lo ha modificado mientras lo tenías abierto. Recarga para ver la versión actual antes de volver a intentarlo."
       },
-      "noStatusHistory": "Sin historial de estados: solo se guarda el último cambio. Las asignaciones se ven en cada incidente."
+      "noStatusHistory": "Sin historial de estados: solo se guarda el último cambio. Las asignaciones se ven en cada incidente.",
+      "outOfScope": "Pertenece a {{organization}}: puedes consultarlo, pero solo su organización o la coordinación pueden cambiar su estado."
     },
     "actions": {
       "label": "Estado operativo",
@@ -629,7 +634,8 @@
       "resource_assigned": "El recurso está asignado a un incidente: retíralo desde el incidente.",
       "coordinates_incomplete": "Indica latitud y longitud, o deja ambas vacías.",
       "location_out_of_area": "La posición está fuera del área de la demo (Asturias).",
-      "concurrent_update": "Otra operación simultánea ha impedido guardar el cambio. No se ha guardado nada: recarga y vuelve a intentarlo."
+      "concurrent_update": "Otra operación simultánea ha impedido guardar el cambio. No se ha guardado nada: recarga y vuelve a intentarlo.",
+      "organization_out_of_scope": "Este recurso pertenece a otra organización: tu rol solo puede modificar los recursos de la tuya. No se ha guardado nada."
     },
     "assignment": {
       "assignedTo": "Asignado a",

@@ -45,7 +45,8 @@ class DemoUser:
     email: str
     full_name: str
     role: RoleCode
-    organization_code: str
+    # `None`: sin organización (para mostrar D3: no modifica ningún recurso).
+    organization_code: str | None
 
 
 ORGANIZATIONS: tuple[DemoOrganization, ...] = (
@@ -85,6 +86,20 @@ USERS: tuple[DemoUser, ...] = (
         full_name="Operación Demo",
         role=RoleCode.OPERATOR,
         organization_code="sim-bomberos-oviedo",
+    ),
+    # Ámbito organizativo (CLAUDE.md §2.11): otro operador, de otra organización,
+    # y uno sin organización.
+    DemoUser(
+        email="operador.sanitario@demo.emergency-command.test",
+        full_name="Operación Sanitaria Demo",
+        role=RoleCode.OPERATOR,
+        organization_code="sim-sanitario-gijon",
+    ),
+    DemoUser(
+        email="operador.sin.organizacion@demo.emergency-command.test",
+        full_name="Operación sin organización Demo",
+        role=RoleCode.OPERATOR,
+        organization_code=None,
     ),
 )
 

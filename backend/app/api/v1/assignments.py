@@ -10,6 +10,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.v1.deps import (
+    AccessScopeDep,
     AssignmentServiceDep,
     CurrentUserDep,
     IncidentServiceDep,
@@ -97,6 +98,7 @@ async def list_incident_assignments(
 @incident_router.get("/{incident_id}/assignment-candidates", dependencies=_CANDIDATES)
 async def list_assignment_candidates(
     incident_id: uuid.UUID,
+    scope: AccessScopeDep,
     service: AssignmentServiceDep,
     type_code: Annotated[str | None, Query(alias="type", max_length=64)] = None,
     organization_id: uuid.UUID | None = None,
@@ -104,12 +106,14 @@ async def list_assignment_candidates(
 ) -> list[AssignmentCandidate]:
     """Recursos asignables ordenados por ETA **estimada** (sin estimación, al final),
     con los tipos sugeridos marcados. Ayuda a la decisión: no se preselecciona ninguno.
-    `include_assigned=true` añade los asignados a otros incidentes (exigen reasignar)."""
+    `include_assigned=true` añade los asignados a otros incidentes (exigen reasignar).
+    Solo recursos del ámbito de escritura del usuario."""
     candidates = await service.candidates(
         incident_id,
         type_code=type_code,
         organization_id=organization_id,
         include_assigned=include_assigned,
+        scope=scope,
     )
     return [_candidate(c) for c in candidates]
 
@@ -119,12 +123,14 @@ async def assign_resource(
     incident_id: uuid.UUID,
     body: AssignmentCreate,
     user: CurrentUserDep,
+    scope: AccessScopeDep,
     service: AssignmentServiceDep,
     incidents: IncidentServiceDep,
 ) -> IncidentDetail:
     """Asigna un recurso disponible. Con `reassign: true`, si está asignado a otro
-    incidente, se retira de él y se asigna a este en la misma transacción."""
-    affected = await service.assign(incident_id, body, user)
+    incidente, se retira de él y se asigna a este en la misma transacción.
+    Recurso fuera del ámbito de escritura del usuario: 403 `organization_out_of_scope`."""
+    affected = await service.assign(incident_id, body, user, scope)
     return incident_detail(await incidents.get_incident(affected))
 
 
@@ -133,11 +139,13 @@ async def mark_arrival(
     assignment_id: uuid.UUID,
     body: AssignmentArrival,
     user: CurrentUserDep,
+    scope: AccessScopeDep,
     service: AssignmentServiceDep,
     incidents: IncidentServiceDep,
 ) -> IncidentDetail:
-    """Marca que el recurso ha llegado al lugar. No cambia el estado del incidente."""
-    affected = await service.arrive(assignment_id, body, user)
+    """Marca que el recurso ha llegado al lugar. No cambia el estado del incidente.
+    Recurso fuera del ámbito de escritura del usuario: 403 `organization_out_of_scope`."""
+    affected = await service.arrive(assignment_id, body, user, scope)
     return incident_detail(await incidents.get_incident(affected))
 
 
@@ -146,9 +154,11 @@ async def release_resource(
     assignment_id: uuid.UUID,
     body: AssignmentRelease,
     user: CurrentUserDep,
+    scope: AccessScopeDep,
     service: AssignmentServiceDep,
     incidents: IncidentServiceDep,
 ) -> IncidentDetail:
-    """Retira el recurso con un motivo (`completed`, `not_needed` o `unavailable`)."""
-    affected = await service.release(assignment_id, body, user)
+    """Retira el recurso con un motivo (`completed`, `not_needed` o `unavailable`).
+    Recurso fuera del ámbito de escritura del usuario: 403 `organization_out_of_scope`."""
+    affected = await service.release(assignment_id, body, user, scope)
     return incident_detail(await incidents.get_incident(affected))

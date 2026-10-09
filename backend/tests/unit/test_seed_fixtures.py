@@ -1,13 +1,23 @@
 """Coherencia de los fixtures de demo, sin base de datos."""
 
+from app.domain.enums import RoleCode
 from app.domain.geo import DEMO_AREA
 from app.domain.incident_rules import ACTIVE_STATUSES
-from seeds.fixtures import INCIDENTS, ORGANIZATIONS, RESOURCES
+from seeds.fixtures import INCIDENTS, ORGANIZATIONS, RESOURCES, USERS
 
 
 def test_keys_and_codes_are_unique() -> None:
     assert len({f.key for f in INCIDENTS}) == len(INCIDENTS)
     assert len({f.code for f in RESOURCES}) == len(RESOURCES)
+
+
+def test_users_belong_to_demo_organizations_or_none() -> None:
+    codes = {o.code for o in ORGANIZATIONS}
+    assert all(u.organization_code is None or u.organization_code in codes for u in USERS)
+    # Uno por rol como mínimo, y un operador sin organización (D3).
+    assert {u.role for u in USERS} == set(RoleCode)
+    assert any(u.role == RoleCode.OPERATOR and u.organization_code is None for u in USERS)
+    assert all(u.email.endswith(".test") for u in USERS)
 
 
 def test_resources_belong_to_demo_organizations() -> None:

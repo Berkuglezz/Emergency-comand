@@ -67,7 +67,12 @@ export function IncidentDetailPage() {
   }
 
   const data = incident.data
+  // Permisos separados (CLAUDE.md §2.11): estado, ficha completa y notas.
+  const canChangeStatus = hasPermission(user, "incidents:change_status")
   const canUpdate = hasPermission(user, "incidents:update")
+  // Sin la edición completa, solo los campos operativos (descripción, personas
+  // afectadas, ubicación y datos del tipo).
+  const canEditOperational = canUpdate || hasPermission(user, "incidents:update_operational")
   const type = types.data?.find((candidate) => candidate.id === data.type.id)
 
   return (
@@ -83,7 +88,7 @@ export function IncidentDetailPage() {
               <AlertDescription>{t("incidents.detail.closedNotice")}</AlertDescription>
             </Alert>
           )}
-          {canUpdate && (
+          {canChangeStatus && (
             <IncidentStatusActions
               incident={data}
               canClose={hasPermission(user, "incidents:close")}
@@ -94,7 +99,8 @@ export function IncidentDetailPage() {
             incident={data}
             type={type}
             types={types.data ?? []}
-            canEdit={canUpdate && data.closed_at === null}
+            canEdit={canEditOperational && data.closed_at === null}
+            operationalOnly={!canUpdate}
             onReload={reload}
           />
           <AssignmentsPanel incident={data} onReload={reload} />
@@ -102,7 +108,7 @@ export function IncidentDetailPage() {
         </div>
         <IncidentTimeline
           incidentId={data.id}
-          canAddNotes={canUpdate}
+          canAddNotes={hasPermission(user, "incidents:annotate")}
           className="lg:max-h-[80dvh]"
         />
       </div>
@@ -137,12 +143,14 @@ function SummaryOrEdit({
   type,
   types,
   canEdit,
+  operationalOnly,
   onReload,
 }: {
   incident: IncidentDetail
   type: IncidentType | undefined
   types: IncidentType[]
   canEdit: boolean
+  operationalOnly: boolean
   onReload: () => void
 }) {
   const { t } = useTranslation()
@@ -160,6 +168,8 @@ function SummaryOrEdit({
           defaultValues={formValuesFromIncident(incident)}
           incidentId={incident.id}
           hasChildren={incident.children.length > 0}
+          canSetPriority={!operationalOnly}
+          operationalOnly={operationalOnly}
           pending={update.isPending}
           submitLabel={t("common.save")}
           pendingLabel={t("common.saving")}
@@ -180,7 +190,9 @@ function SummaryOrEdit({
             )
           }
           onSubmit={(values) => {
-            const payload = toUpdatePayload(values, incident, type?.details_schema_key)
+            const payload = toUpdatePayload(values, incident, type?.details_schema_key, {
+              operationalOnly,
+            })
             // Sin cambios reales no se llama a la API (no habría evento ni versión nueva).
             if (!payload) {
               setEditing(false)

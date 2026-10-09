@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query"
 import type { TFunction } from "i18next"
-import { CircleOff, History, Link2, Pencil, Power } from "lucide-react"
+import { CircleOff, History, Link2, Lock, Pencil, Power } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useParams } from "react-router"
@@ -14,7 +14,7 @@ import { Panel } from "@/components/ops/panel"
 import { SimulatedPill } from "@/components/ops/simulated-pill"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { hasPermission, useSession } from "@/features/auth/hooks"
+import { canWriteOrganization, hasPermission, useSession } from "@/features/auth/hooks"
 import { CoordinatesText } from "@/features/incidents/components/location-text"
 import { useOrganizations } from "@/features/organizations/hooks"
 import { ApiError } from "@/lib/api-client"
@@ -95,9 +95,17 @@ export function ResourceDetailPage() {
         </Alert>
       )}
       {data.current_assignment && <CurrentAssignmentNotice resource={data} />}
-      {data.is_active && hasPermission(user, "resources:update_status") && (
-        <StatusActions resource={data} onReload={reload} />
-      )}
+      {data.is_active &&
+        hasPermission(user, "resources:update_status") &&
+        (canWriteOrganization(user, data.organization.id) ? (
+          <StatusActions resource={data} onReload={reload} />
+        ) : (
+          // Fuera de su ámbito: lo ve (D4), pero no lo modifica (CLAUDE.md §2.11).
+          <p className="flex items-center gap-1.5 text-muted-foreground">
+            <Lock aria-hidden className="size-4 shrink-0" />
+            {t("resources.detail.outOfScope", { organization: data.organization.name })}
+          </p>
+        ))}
       <SummaryOrEdit resource={data} canManage={canManage} onReload={reload} />
     </div>
   )

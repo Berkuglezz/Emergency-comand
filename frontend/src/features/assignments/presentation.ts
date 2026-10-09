@@ -36,6 +36,7 @@ const KNOWN_ERRORS = [
   "assignment_already_arrived",
   "invalid_release_reason",
   "permission_denied",
+  "organization_out_of_scope",
   "validation_error",
   "network_error",
 ] as const

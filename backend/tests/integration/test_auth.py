@@ -149,10 +149,13 @@ async def test_me_returns_profile_role_and_permissions(
     assert body["permissions"] == [
         "assignments:manage",
         "assignments:update",
+        "incidents:annotate",
+        "incidents:change_status",
         "incidents:close",
         "incidents:create",
         "incidents:read",
         "incidents:update",
+        "incidents:update_operational",
         "organizations:read",
         "resources:read",
         "resources:update_status",
@@ -160,6 +163,53 @@ async def test_me_returns_profile_role_and_permissions(
     assert body["organization"]["code"] == "test-coordinator"
     assert "password_hash" not in body
     assert "password" not in response.text
+
+
+ALL = {"all_organizations": True, "organization_ids": []}
+
+
+@pytest.mark.parametrize(
+    ("role", "with_organization", "write_own_only"),
+    [
+        (RoleCode.ADMIN, False, False),
+        (RoleCode.COORDINATOR, True, False),
+        (RoleCode.OPERATOR, True, True),
+        (RoleCode.OPERATOR, False, True),
+    ],
+)
+async def test_me_returns_the_effective_scope(
+    client: AsyncClient,
+    make_user: UserFactory,
+    role: RoleCode,
+    with_organization: bool,
+    write_own_only: bool,
+) -> None:
+    """CLAUDE.md §2.11, R.7: el ámbito lo calcula el backend a partir del rol y la
+    organización; el cliente no puede influir en él."""
+    user = await make_user(role, with_organization=with_organization)
+    access = (await _login(client, user.email)).json()["access_token"]
+
+    # Parámetros inventados por el cliente: se ignoran.
+    response = await client.get(
+        "/api/v1/auth/me",
+        params={"scope": "all", "write": "all"},
+        headers=_bearer(access),
+    )
+
+    assert response.status_code == 200
+    scope = response.json()["scope"]
+    # D4: todos leen todas las organizaciones.
+    assert scope["read"] == ALL
+    if not write_own_only:
+        assert scope["write"] == ALL
+    elif with_organization:
+        assert scope["write"] == {
+            "all_organizations": False,
+            "organization_ids": [str(user.organization_id)],
+        }
+    else:
+        # D3: operador sin organización, sin escritura sobre recursos.
+        assert scope["write"] == {"all_organizations": False, "organization_ids": []}
 
 
 @pytest.mark.parametrize(

@@ -10,11 +10,12 @@ import type { components } from "@/types/api"
 import { FakeAssignments } from "./fake-assignments"
 import { FakeIncidents } from "./fake-incidents"
 import { FakeResources } from "./fake-resources"
+import { scopeFor } from "./fake-scope"
 
 type Schemas = components["schemas"]
 type Me = Schemas["MeResponse"]
 
-const ORGANIZATION = {
+export const ORGANIZATION = {
   id: "00000000-0000-4000-8000-000000000001",
   code: "sim-test",
   name: "Organización de prueba (simulado)",
@@ -22,12 +23,26 @@ const ORGANIZATION = {
   is_active: true,
 } satisfies Schemas["OrganizationResponse"]
 
+/** Segunda organización, para probar el ámbito organizativo (CLAUDE.md §2.11). */
+export const OTHER_ORGANIZATION = {
+  id: "00000000-0000-4000-8000-000000000002",
+  code: "sim-otra",
+  name: "Otra organización de prueba (simulado)",
+  is_simulated: true,
+  is_active: true,
+} satisfies Schemas["OrganizationResponse"]
+
+type Organization = Schemas["OrganizationSummary"]
+
 // Mismo mapa que el backend (app/core/permissions.py).
 const PERMISSIONS: Record<Me["role"], Me["permissions"]> = {
   admin: [
     "incidents:read",
     "incidents:create",
     "incidents:update",
+    "incidents:update_operational",
+    "incidents:annotate",
+    "incidents:change_status",
     "incidents:close",
     "resources:read",
     "resources:update_status",
@@ -40,6 +55,9 @@ const PERMISSIONS: Record<Me["role"], Me["permissions"]> = {
     "incidents:read",
     "incidents:create",
     "incidents:update",
+    "incidents:update_operational",
+    "incidents:annotate",
+    "incidents:change_status",
     "incidents:close",
     "resources:read",
     "resources:update_status",
@@ -47,19 +65,28 @@ const PERMISSIONS: Record<Me["role"], Me["permissions"]> = {
     "assignments:manage",
     "assignments:update",
   ],
-  operator: ["incidents:read", "resources:read", "resources:update_status", "assignments:update"],
+  operator: [
+    "incidents:read",
+    "incidents:create",
+    "incidents:update_operational",
+    "incidents:annotate",
+    "resources:read",
+    "resources:update_status",
+    "assignments:update",
+  ],
 }
 
 export const TEST_PASSWORD = "test-password-123"
 
-function makeUser(role: Me["role"]): Me {
+function makeUser(role: Me["role"], organization: Organization | null = ORGANIZATION): Me {
   return {
     id: `00000000-0000-4000-8000-00000000010${String(["admin", "coordinator", "operator"].indexOf(role))}`,
     email: `${role}@example.test`,
     full_name: `Usuario ${role}`,
     role,
     permissions: PERMISSIONS[role],
-    organization: ORGANIZATION,
+    organization,
+    scope: scopeFor(role, organization),
   }
 }
 
@@ -73,7 +100,7 @@ export interface RecordedCall {
 }
 
 export class FakeBackend {
-  readonly users: Me[] = [makeUser("admin"), makeUser("coordinator"), makeUser("operator")]
+  users: Me[] = [makeUser("admin"), makeUser("coordinator"), makeUser("operator")]
   /** Cookie de refresh del «navegador». JavaScript de la app nunca la ve. */
   cookie: string | null = null
   readonly calls: RecordedCall[] = []
@@ -107,8 +134,15 @@ export class FakeBackend {
     return this.handle(method, path, url.searchParams, authorization, init?.body)
   })
 
-  /** Simula una sesión previa: hay cookie de refresh válida en el navegador. */
-  startSessionFor(role: Me["role"]): void {
+  /**
+   * Simula una sesión previa: hay cookie de refresh válida en el navegador.
+   * `organization` cambia la organización del usuario (`null`: sin organización).
+   */
+  startSessionFor(role: Me["role"], options: { organization?: Organization | null } = {}): void {
+    if ("organization" in options) {
+      const user = makeUser(role, options.organization ?? null)
+      this.users = this.users.map((candidate) => (candidate.role === role ? user : candidate))
+    }
     this.cookie = this.issueRefresh(this.userFor(role))
   }
 

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router"
 
 import { Panel, type PanelStatus } from "@/components/ops/panel"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { hasPermission, useSession } from "@/features/auth/hooks"
 
 import { emptyFormValues, toCreatePayload } from "../form"
 import { useCreateIncident, useIncidentTypes } from "../hooks"
@@ -16,6 +17,10 @@ export function NewIncidentPage() {
   const navigate = useNavigate()
   const types = useIncidentTypes()
   const create = useCreateIncident()
+  const { data: user } = useSession()
+  // Elegir la prioridad inicial o el incidente padre exige la edición completa
+  // (CLAUDE.md §2.11, D10 y D11).
+  const canSetPriority = hasPermission(user, "incidents:update")
 
   let status: PanelStatus = "ready"
   if (types.isPending) status = "loading"
@@ -38,6 +43,8 @@ export function NewIncidentPage() {
             mode="create"
             types={types.data}
             defaultValues={emptyFormValues()}
+            canSetPriority={canSetPriority}
+            canSetParent={canSetPriority}
             pending={create.isPending}
             submitLabel={t("incidents.create.submit")}
             pendingLabel={t("incidents.create.submitting")}
@@ -50,11 +57,15 @@ export function NewIncidentPage() {
               )
             }
             onSubmit={(values, type) => {
-              create.mutate(toCreatePayload(values, type?.details_schema_key), {
-                onSuccess: (incident) => {
-                  void navigate(`/incidents/${incident.id}`, { replace: true })
-                },
-              })
+              const payload = toCreatePayload(values, type?.details_schema_key)
+              create.mutate(
+                canSetPriority ? payload : { ...payload, priority: null, parent_incident_id: null },
+                {
+                  onSuccess: (incident) => {
+                    void navigate(`/incidents/${incident.id}`, { replace: true })
+                  },
+                }
+              )
             }}
             onCancel={() => {
               void navigate("/incidents")

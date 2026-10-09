@@ -126,8 +126,12 @@ def test_admin_has_every_permission() -> None:
 # Matriz aprobada para la Fase 2: (admin, coordinator, operator).
 PERMISSION_MATRIX: dict[Permission, tuple[bool, bool, bool]] = {
     Permission.INCIDENTS_READ: (True, True, True),
-    Permission.INCIDENTS_CREATE: (True, True, False),
+    # Matriz aprobada en CLAUDE.md §2.11.2 (admin, coordinador, operador).
+    Permission.INCIDENTS_CREATE: (True, True, True),
     Permission.INCIDENTS_UPDATE: (True, True, False),
+    Permission.INCIDENTS_UPDATE_OPERATIONAL: (True, True, True),
+    Permission.INCIDENTS_ANNOTATE: (True, True, True),
+    Permission.INCIDENTS_CHANGE_STATUS: (True, True, False),
     Permission.INCIDENTS_CLOSE: (True, True, False),
     Permission.RESOURCES_READ: (True, True, True),
     Permission.RESOURCES_UPDATE_STATUS: (True, True, True),

@@ -13,8 +13,15 @@ from app.domain.enums import RoleCode
 class Permission(StrEnum):
     INCIDENTS_READ = "incidents:read"
     INCIDENTS_CREATE = "incidents:create"
+    # Edición completa de la ficha (prioridad, tipo, título, padre…).
     INCIDENTS_UPDATE = "incidents:update"
-    # Cerrar o cancelar un incidente.
+    # Edición limitada a los campos operativos (CLAUDE.md §2.11, D6).
+    INCIDENTS_UPDATE_OPERATIONAL = "incidents:update_operational"
+    # Añadir notas al historial.
+    INCIDENTS_ANNOTATE = "incidents:annotate"
+    # Cambiar el estado del incidente (no el de los recursos).
+    INCIDENTS_CHANGE_STATUS = "incidents:change_status"
+    # Cerrar o cancelar un incidente (además de `incidents:change_status`).
     INCIDENTS_CLOSE = "incidents:close"
     RESOURCES_READ = "resources:read"
     RESOURCES_UPDATE_STATUS = "resources:update_status"
@@ -36,6 +43,9 @@ ROLE_PERMISSIONS: dict[RoleCode, frozenset[Permission]] = {
             P.INCIDENTS_READ,
             P.INCIDENTS_CREATE,
             P.INCIDENTS_UPDATE,
+            P.INCIDENTS_UPDATE_OPERATIONAL,
+            P.INCIDENTS_ANNOTATE,
+            P.INCIDENTS_CHANGE_STATUS,
             P.INCIDENTS_CLOSE,
             P.RESOURCES_READ,
             P.RESOURCES_UPDATE_STATUS,
@@ -44,11 +54,16 @@ ROLE_PERMISSIONS: dict[RoleCode, frozenset[Permission]] = {
             P.ASSIGNMENTS_UPDATE,
         }
     ),
-    # Usuario operativo: consulta incidentes, actualiza el estado de recursos y
-    # marca la llegada de los asignados (no asigna ni retira).
+    # Usuario operativo (CLAUDE.md §2.11): registra incidentes, añade notas y
+    # edita sus campos operativos; actualiza el estado operativo de los recursos
+    # y marca la llegada de los asignados. No cambia el estado del incidente, ni
+    # lo cierra, ni asigna o retira recursos.
     RoleCode.OPERATOR: frozenset(
         {
             P.INCIDENTS_READ,
+            P.INCIDENTS_CREATE,
+            P.INCIDENTS_UPDATE_OPERATIONAL,
+            P.INCIDENTS_ANNOTATE,
             P.RESOURCES_READ,
             P.RESOURCES_UPDATE_STATUS,
             P.ASSIGNMENTS_UPDATE,
