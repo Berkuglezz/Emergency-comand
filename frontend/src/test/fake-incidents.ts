@@ -41,7 +41,7 @@ export const INCIDENT_TYPES: Schemas["IncidentTypeResponse"][] = [
 const TRANSITIONS: Record<Status, Status[]> = {
   received: ["assessing", "cancelled"],
   assessing: ["in_progress", "cancelled"],
-  resources_assigned: [],
+  resources_assigned: ["in_progress", "cancelled"],
   in_progress: ["controlled", "cancelled"],
   controlled: ["in_progress", "closed"],
   closed: [],
@@ -63,8 +63,12 @@ export interface IncidentSeed {
   coordinates?: { latitude: number; longitude: number }
 }
 
+export type StoredIncident = Stored
+
 export class FakeIncidents {
   readonly incidents: Stored[] = []
+  /** Lo fija el doble de asignaciones: retira los recursos al cerrar o cancelar. */
+  onClose?: (incident: Stored, user: Me) => void
   private readonly events = new Map<string, Event[]>()
   /** El listado responde 500. */
   failList = false
@@ -90,6 +94,12 @@ export class FakeIncidents {
     if (seed.status) stored.status = seed.status
     if (seed.status && TERMINAL.includes(seed.status)) stored.closed_at = this.now()
     return this.detail(stored)
+  }
+
+  typeOf(incident: Stored): Schemas["IncidentTypeResponse"] {
+    const type = INCIDENT_TYPES.find((candidate) => candidate.id === incident.type.id)
+    if (!type) throw new Error("tipo desconocido")
+    return type
   }
 
   byCode(code: string): Stored {
@@ -173,6 +183,8 @@ export class FakeIncidents {
         return error(403, "permission_denied")
       const payload: Record<string, unknown> = { from: incident.status, to: target }
       if (typeof input.reason === "string") payload.reason = input.reason
+      // Como el backend: cerrar o cancelar retira antes los recursos asignados.
+      if (TERMINAL.includes(target)) this.onClose?.(incident, user)
       incident.status = target
       incident.closed_at = TERMINAL.includes(target) ? this.now() : null
       incident.version += 1
@@ -229,7 +241,7 @@ export class FakeIncidents {
 
   // --- Internos ---------------------------------------------------------------
 
-  private now(): string {
+  now(): string {
     this.clock += 60_000
     return new Date(this.clock).toISOString()
   }
@@ -270,6 +282,7 @@ export class FakeIncidents {
       details: data.details ?? {},
       closed_at: null,
       created_at: now,
+      active_assignments: 0,
     }
     this.incidents.push(stored)
     this.record(stored, user, "incident_created", {
@@ -281,7 +294,7 @@ export class FakeIncidents {
     return stored
   }
 
-  private record(
+  record(
     incident: Stored,
     user: Me | null,
     eventType: Event["event_type"],
@@ -306,7 +319,7 @@ export class FakeIncidents {
     return { id, code, title, status, priority }
   }
 
-  private detail(incident: Stored): Detail {
+  detail(incident: Stored): Detail {
     const parent = this.incidents.find((candidate) => candidate.id === incident.parent_incident_id)
     return {
       ...incident,

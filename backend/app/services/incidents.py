@@ -21,7 +21,7 @@ from app.domain.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
-from app.domain.geo import BoundingBox, validate_coordinates
+from app.domain.geo import BoundingBox
 from app.domain.incident_details import validate_details
 from app.domain.incident_rules import (
     CLOSING_STATUSES,
@@ -29,16 +29,18 @@ from app.domain.incident_rules import (
     TERMINAL_STATUSES,
     can_transition,
 )
-from app.models import Incident, IncidentEvent, IncidentType, Location, User
-from app.models.location import point
+from app.models import Incident, IncidentEvent, IncidentType, User
+from app.repositories.assignments import AssignmentRepository
 from app.repositories.incidents import IncidentListQuery, IncidentRepository
 from app.schemas.incidents import (
     IncidentCreate,
     IncidentNoteCreate,
     IncidentStatusChange,
     IncidentUpdate,
-    LocationInput,
 )
+from app.services.assignments import release_all_for_closing
+from app.services.incident_events import EventRecorder
+from app.services.locations import apply_location, new_location
 from app.services.transactions import commit_or_conflict
 
 # Campos editables sin evento propio (se agrupan en `incident_updated`).
@@ -55,6 +57,8 @@ MAP_FEATURE_LIMIT = 1000
 class IncidentView:
     incident: Incident
     children: Sequence[Incident]
+    # Recursos asignados ahora mismo.
+    active_assignments: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,79 +71,11 @@ class IncidentMap:
     truncated: bool
 
 
-class _EventRecorder:
-    """Inserta las entradas de historial de una operación, todas con la hora
-    real en que se produjo. El timeline se ordena por `(occurred_at, id)`."""
-
-    def __init__(self, repository: IncidentRepository, actor: User, now: datetime) -> None:
-        self._repository = repository
-        self._actor = actor
-        self._now = now
-
-    def record(
-        self, incident: Incident, event_type: IncidentEventType, payload: dict[str, Any]
-    ) -> IncidentEvent:
-        event = IncidentEvent(
-            incident_id=incident.id,
-            event_type=event_type,
-            occurred_at=self._now,
-            actor_user_id=self._actor.id,
-            payload=payload,
-            is_simulated=incident.is_simulated,
-        )
-        self._repository.add_event(event)
-        return event
-
-
-def _new_location(data: LocationInput) -> Location:
-    coordinates = validate_coordinates(data.latitude, data.longitude)
-    return Location(
-        municipality=data.municipality,
-        description=data.description or None,  # cadena vacía = sin valor
-        geom=point(*coordinates) if coordinates else None,
-    )
-
-
-def _location_snapshot(location: Location) -> dict[str, Any]:
-    return {
-        "municipality": location.municipality,
-        "description": location.description,
-        "latitude": location.latitude,
-        "longitude": location.longitude,
-    }
-
-
-def _apply_location(location: Location, data: LocationInput) -> dict[str, Any] | None:
-    """Sustituye la ubicación completa. Si algo cambia, devuelve el payload de
-    `location_changed` (campos cambiados, antes y después); si no, `None`.
-
-    Las coordenadas van al historial (protegido por `incidents:read`), nunca a
-    los logs."""
-    coordinates = validate_coordinates(data.latitude, data.longitude)
-    before = _location_snapshot(location)
-    after = {
-        "municipality": data.municipality,
-        "description": data.description or None,
-        "latitude": data.latitude,
-        "longitude": data.longitude,
-    }
-    fields = [name for name in ("municipality", "description") if before[name] != after[name]]
-    if (before["latitude"], before["longitude"]) != (after["latitude"], after["longitude"]):
-        fields.append("coordinates")
-    if not fields:
-        return None
-
-    location.municipality = data.municipality
-    location.description = data.description or None
-    if "coordinates" in fields:
-        location.geom = point(*coordinates) if coordinates else None
-    return {"fields": sorted(fields), "from": before, "to": after}
-
-
 class IncidentService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._incidents = IncidentRepository(session)
+        self._assignments = AssignmentRepository(session)
 
     # --- Consultas --------------------------------------------------------------
 
@@ -148,6 +84,10 @@ class IncidentService:
 
     async def list_incidents(self, query: IncidentListQuery) -> tuple[Sequence[Incident], int]:
         return await self._incidents.list(query)
+
+    async def active_assignment_counts(self, incidents: Sequence[Incident]) -> dict[uuid.UUID, int]:
+        """Recursos asignados ahora mismo a cada incidente (los que no tienen, no aparecen)."""
+        return await self._assignments.count_active(incident.id for incident in incidents)
 
     async def map_incidents(
         self, query: IncidentListQuery, bbox: BoundingBox | None
@@ -166,7 +106,12 @@ class IncidentService:
         incident = await self._incidents.get(incident_id)
         if incident is None:
             raise NotFoundError("incident_not_found")
-        return IncidentView(incident, await self._incidents.children(incident.id))
+        counts = await self._assignments.count_active([incident.id])
+        return IncidentView(
+            incident,
+            await self._incidents.children(incident.id),
+            counts.get(incident.id, 0),
+        )
 
     async def list_events(
         self, incident_id: uuid.UUID
@@ -192,7 +137,7 @@ class IncidentService:
             description=data.description or None,
             status=INITIAL_STATUS,
             priority=data.priority or incident_type.default_priority,
-            location=_new_location(data.location),
+            location=new_location(data.location),
             affected_people=data.affected_people,
             details=details,
             parent_incident_id=parent.id if parent else None,
@@ -203,7 +148,7 @@ class IncidentService:
         self._incidents.add(incident)
         await self._session.flush()
 
-        _EventRecorder(self._incidents, actor, now).record(
+        EventRecorder(self._incidents, actor, now).record(
             incident,
             IncidentEventType.INCIDENT_CREATED,
             {
@@ -230,7 +175,7 @@ class IncidentService:
             raise InvalidInputError("field_not_nullable")
 
         now = datetime.now(UTC)
-        events = _EventRecorder(self._incidents, actor, now)
+        events = EventRecorder(self._incidents, actor, now)
 
         # El padre se valida (consulta) antes de modificar nada: así el autoflush
         # no emite un UPDATE intermedio y `version` sube una sola vez.
@@ -265,7 +210,7 @@ class IncidentService:
                     changed.append(name)
         location_change = None
         if "location" in sent and data.location is not None:
-            location_change = _apply_location(incident.location, data.location)
+            location_change = apply_location(incident.location, data.location)
         if "details" in sent and data.details is not None:
             details = validate_details(incident.type.details_schema_key, data.details)
             if details != incident.details:
@@ -296,15 +241,19 @@ class IncidentService:
             raise PermissionDeniedError()
 
         now = datetime.now(UTC)
+        events = EventRecorder(self._incidents, actor, now)
+        if target in TERMINAL_STATUSES:
+            # Cerrar o cancelar retira antes los recursos asignados (`incident_closed`).
+            await release_all_for_closing(
+                self._session, incident, actor=actor, events=events, now=now
+            )
         previous = incident.status
         incident.status = target
         incident.closed_at = now if target in TERMINAL_STATUSES else None
         payload: dict[str, Any] = {"from": previous, "to": target}
         if data.reason:
             payload["reason"] = data.reason
-        _EventRecorder(self._incidents, actor, now).record(
-            incident, IncidentEventType.STATUS_CHANGED, payload
-        )
+        events.record(incident, IncidentEventType.STATUS_CHANGED, payload)
         await self._commit()
         return await self.get_incident(incident.id)
 
@@ -314,7 +263,7 @@ class IncidentService:
         incident = await self._incidents.get(incident_id)
         if incident is None:
             raise NotFoundError("incident_not_found")
-        event = _EventRecorder(self._incidents, actor, datetime.now(UTC)).record(
+        event = EventRecorder(self._incidents, actor, datetime.now(UTC)).record(
             incident, IncidentEventType.NOTE_ADDED, {"text": data.text}
         )
         await self._commit()

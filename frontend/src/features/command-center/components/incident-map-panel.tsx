@@ -9,9 +9,12 @@ import { PRIORITY_CODES } from "@/components/ops/priority"
 import { PriorityBadge } from "@/components/ops/priority-badge"
 import { StatusPill } from "@/components/ops/status-pill"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAssignments } from "@/features/assignments/hooks"
 import { useIncident, useIncidentMap } from "@/features/incidents/hooks"
 import { incidentErrorMessage } from "@/features/incidents/presentation"
 import { IncidentsMap } from "@/features/map/lazy"
+import type { MapBase } from "@/features/map/incidents-map"
+import { useCodeLabel } from "@/lib/code-label"
 import { formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -34,6 +37,33 @@ export function IncidentMapPanel({ selectedId, onSelect, className }: IncidentMa
   const map = useIncidentMap(toActiveQuery(parseCommandCenterFilters(searchParams)))
   // Misma consulta que el panel lateral (caché compartida): ¿tiene coordenadas?
   const selected = useIncident(selectedId ?? "", { enabled: selectedId !== null })
+  const label = useCodeLabel()
+  // Bases de los recursos asignados al incidente seleccionado (solo esas).
+  const assignments = useAssignments(selectedId ?? "", { enabled: selectedId !== null })
+  // Varios recursos pueden compartir base: un marcador por punto.
+  const bases = new Map<string, MapBase>()
+  for (const assignment of assignments.data ?? []) {
+    const { base } = assignment.resource
+    if (assignment.released_at !== null || base.latitude === null || base.longitude === null)
+      continue
+    const key = `${String(base.longitude)},${String(base.latitude)}`
+    const entry = bases.get(key) ?? {
+      id: key,
+      items: [],
+      position: [base.longitude, base.latitude],
+    }
+    entry.items.push({
+      code: assignment.resource.code,
+      typeLabel: label("resourceTypes", assignment.resource.type.code),
+      etaLabel: assignment.eta
+        ? t("ops.eta.short", {
+            minutes: formatNumber(assignment.eta.minutes),
+            distance: formatNumber(assignment.eta.distance_km),
+          })
+        : t("ops.eta.none"),
+    })
+    bases.set(key, entry)
+  }
 
   const features = map.data?.features ?? []
   const unlocated = map.data?.unlocated_total ?? 0
@@ -61,6 +91,7 @@ export function IncidentMapPanel({ selectedId, onSelect, className }: IncidentMa
         <Suspense fallback={<Skeleton className="min-h-56 flex-1" />}>
           <IncidentsMap
             features={features}
+            bases={selectedId ? [...bases.values()] : []}
             selectedId={selectedId}
             onSelect={onSelect}
             className="min-h-56 flex-1"

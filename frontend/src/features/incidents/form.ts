@@ -9,7 +9,7 @@
 import type { TFunction } from "i18next"
 import { z } from "zod"
 
-import { inDemoArea } from "@/features/map/config"
+import { parseCoordinate, refineCoordinates } from "@/lib/coordinates"
 
 import type { IncidentCreate, IncidentDetail, IncidentPriority, IncidentUpdate } from "./types"
 
@@ -89,22 +89,6 @@ export function formValuesFromIncident(incident: IncidentDetail): IncidentFormVa
 
 const INTEGER = /^\d+$/
 const DECIMAL_2 = /^\d+([.,]\d{1,2})?$/
-const COORDINATE = /^-?\d{1,3}([.,]\d+)?$/
-/** 6 decimales ≈ 11 cm, como redondea el backend. */
-const COORDINATE_DECIMALS = 6
-
-/** Coordenada escrita por el usuario → número redondeado, o `null` si no es válida. */
-export function parseCoordinate(value: string): number | null {
-  const text = value.trim()
-  if (!COORDINATE.test(text)) return null
-  const number = Number(text.replace(",", "."))
-  return Number.isFinite(number) ? roundCoordinate(number) : null
-}
-
-export function roundCoordinate(value: number): number {
-  return Number(value.toFixed(COORDINATE_DECIMALS))
-}
-
 function optionalInteger(max: number, t: TFunction) {
   return z
     .string()
@@ -158,36 +142,7 @@ export function createIncidentFormSchema(t: TFunction) {
       })
       // Mismas reglas que el backend (`coordinates_incomplete`, `location_out_of_area`).
       .superRefine((values, context) => {
-        const latitudeText = values.latitude.trim()
-        const longitudeText = values.longitude.trim()
-        if (!latitudeText && !longitudeText) return
-        const latitude = parseCoordinate(latitudeText)
-        const longitude = parseCoordinate(longitudeText)
-        if (latitude === null || latitude < -90 || latitude > 90) {
-          context.addIssue({
-            code: "custom",
-            path: ["latitude"],
-            message: latitudeText
-              ? t("incidents.validation.latitudeInvalid")
-              : t("incidents.validation.coordinatesIncomplete"),
-          })
-        }
-        if (longitude === null || longitude < -180 || longitude > 180) {
-          context.addIssue({
-            code: "custom",
-            path: ["longitude"],
-            message: longitudeText
-              ? t("incidents.validation.longitudeInvalid")
-              : t("incidents.validation.coordinatesIncomplete"),
-          })
-        }
-        if (latitude !== null && longitude !== null && !inDemoArea(latitude, longitude)) {
-          context.addIssue({
-            code: "custom",
-            path: ["latitude"],
-            message: t("incidents.validation.outOfArea"),
-          })
-        }
+        refineCoordinates(values, context, t)
       }) satisfies z.ZodType<IncidentFormValues>
   )
 }

@@ -3,6 +3,7 @@ import { type ReactNode, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 
 import { IncidentMarker } from "@/components/ops/incident-marker"
+import { ResourceMarker, type ResourceMarkerItem } from "@/components/ops/resource-marker"
 import { Button } from "@/components/ui/button"
 import type { IncidentMapFeature } from "@/features/incidents/types"
 
@@ -10,8 +11,17 @@ import { ASTURIAS_BOUNDS, type LngLat, POINT_ZOOM, prefersReducedMotion } from "
 import { MapFrame, MapMarker } from "./map-parts"
 import { type MapLibreMap, useMapLibre } from "./use-maplibre"
 
+/** Base (un punto) con los recursos asignados al incidente seleccionado que la comparten. */
+export interface MapBase {
+  id: string
+  items: ResourceMarkerItem[]
+  position: LngLat
+}
+
 export interface IncidentsMapProps {
   features: IncidentMapFeature[]
+  /** Bases de los recursos asignados al incidente seleccionado (solo esas). */
+  bases?: MapBase[]
   selectedId: string | null
   onSelect: (id: string) => void
   /** Capas propias sobre el mapa (aviso de datos simulados, leyenda…). */
@@ -22,6 +32,7 @@ export interface IncidentsMapProps {
 /** Mapa del centro de mando: un marcador por incidente con coordenadas. */
 export default function IncidentsMap({
   features,
+  bases = [],
   selectedId,
   onSelect,
   overlay,
@@ -57,7 +68,10 @@ export default function IncidentsMap({
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  fitToIncidents(map, features)
+                  fitToPoints(map, [
+                    ...features.map((feature) => feature.geometry.coordinates),
+                    ...bases.map((base) => base.position),
+                  ])
                 }}
                 disabled={features.length === 0}
               >
@@ -106,14 +120,25 @@ export default function IncidentsMap({
             </MapMarker>
           )
         })}
+      {/* Bases de los recursos asignados: sin líneas hacia el incidente (no hay rutas). */}
+      {map &&
+        bases.map((base) => (
+          <MapMarker
+            key={base.id}
+            map={map}
+            longitude={base.position[0]}
+            latitude={base.position[1]}
+          >
+            <ResourceMarker items={base.items} />
+          </MapMarker>
+        ))}
     </MapFrame>
   )
 }
 
-/** Encuadra todos los marcadores; con uno solo, lo centra con un zoom fijo. */
-function fitToIncidents(map: MapLibreMap, features: IncidentMapFeature[]): void {
+/** Encuadra todos los puntos visibles; con uno solo, lo centra con un zoom fijo. */
+function fitToPoints(map: MapLibreMap, points: LngLat[]): void {
   const animate = !prefersReducedMotion()
-  const points = features.map((feature) => feature.geometry.coordinates)
   const [first] = points
   if (!first) return
   if (points.length === 1) {

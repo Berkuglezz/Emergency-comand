@@ -16,6 +16,7 @@ export const RESOURCE_TYPES: Schemas["ResourceTypeResponse"][] = [
     code: "fire_engine",
     category: "fire",
     icon: "Truck",
+    average_speed_kmh: 50,
     is_active: true,
   },
   {
@@ -23,6 +24,7 @@ export const RESOURCE_TYPES: Schemas["ResourceTypeResponse"][] = [
     code: "ambulance_basic",
     category: "medical",
     icon: "Ambulance",
+    average_speed_kmh: 60,
     is_active: true,
   },
 ]
@@ -35,10 +37,14 @@ export interface ResourceSeed {
   status?: Status
   typeCode?: string
   isActive?: boolean
+  /** Coordenadas de la base (latitud, longitud). */
+  base?: { latitude: number; longitude: number }
 }
 
 export class FakeResources {
   readonly resources: Resource[] = []
+  /** Lo fija el doble de asignaciones: asignación activa de cada recurso. */
+  currentFor: (resourceId: string) => Resource["current_assignment"] = () => null
   private clock = Date.parse("2026-10-07T07:00:00Z")
 
   private readonly organization: Schemas["OrganizationSummary"]
@@ -59,7 +65,13 @@ export class FakeResources {
       organization: this.organization,
       status: seed.status ?? "available",
       status_changed_at: now,
-      municipality: "Oviedo",
+      base: {
+        municipality: "Oviedo",
+        description: null,
+        latitude: seed.base?.latitude ?? null,
+        longitude: seed.base?.longitude ?? null,
+      },
+      current_assignment: null,
       is_active: seed.isActive ?? true,
       is_simulated: true,
       version: 1,
@@ -112,40 +124,57 @@ export class FakeResources {
         return error(409, "resource_code_taken")
       const type = RESOURCE_TYPES.find((candidate) => candidate.id === input.type_id)
       const resource = this.add({ code, name: String(input.name), typeCode: type?.code })
-      resource.municipality = String(input.municipality)
+      const base = input.base as Schemas["LocationInput"]
+      resource.base = {
+        municipality: base.municipality,
+        description: base.description ?? null,
+        latitude: base.latitude ?? null,
+        longitude: base.longitude ?? null,
+      }
       resource.is_simulated = false
       if (typeof input.status === "string") resource.status = input.status as Status
-      return json(201, resource)
+      return json(201, this.view(resource))
     }
 
     const resource = this.resources.find((candidate) => candidate.id === id)
     if (!resource) return error(404, "resource_not_found")
-    if (route === "GET /resources/:id") return json(200, resource)
+    if (route === "GET /resources/:id") return json(200, this.view(resource))
 
     if (route === "POST /resources/:id/status") {
       if (!can("resources:update_status")) return error(403, "permission_denied")
       if (input.version !== resource.version) return error(409, "version_conflict")
       if (!resource.is_active) return error(422, "resource_inactive")
       if (input.status === resource.status) return error(422, "invalid_transition")
+      if (this.currentFor(resource.id)) return error(422, "resource_assigned")
       resource.status = input.status as Status
       resource.status_changed_at = this.now()
       resource.version += 1
-      return json(200, resource)
+      return json(200, this.view(resource))
     }
     if (route === "PATCH /resources/:id") {
       if (!can("resources:manage")) return error(403, "permission_denied")
       if (input.version !== resource.version) return error(409, "version_conflict")
       let changed = false
-      for (const field of ["name", "municipality", "is_active"] as const) {
+      if (input.is_active === false && this.currentFor(resource.id))
+        return error(422, "resource_assigned")
+      if (input.base) {
+        resource.base = { ...resource.base, ...(input.base as Schemas["LocationInput"]) }
+        changed = true
+      }
+      for (const field of ["name", "is_active"] as const) {
         if (field in input && input[field] !== resource[field]) {
           Object.assign(resource, { [field]: input[field] })
           changed = true
         }
       }
       if (changed) resource.version += 1
-      return json(200, resource)
+      return json(200, this.view(resource))
     }
     return error(404, "not_found")
+  }
+
+  private view(resource: Resource): Resource {
+    return { ...resource, current_assignment: this.currentFor(resource.id) }
   }
 
   private now(): string {
@@ -173,7 +202,12 @@ export class FakeResources {
           ? STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.code.localeCompare(b.code)
           : a.code.localeCompare(b.code)
       )
-    return { items: filtered.slice(offset, offset + limit), total: filtered.length, limit, offset }
+    return {
+      items: filtered.slice(offset, offset + limit).map((resource) => this.view(resource)),
+      total: filtered.length,
+      limit,
+      offset,
+    }
   }
 }
 

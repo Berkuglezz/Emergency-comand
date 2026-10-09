@@ -11,8 +11,10 @@ from app.domain.enums import (
     IncidentEventType,
     IncidentPriority,
     IncidentStatus,
+    ReleaseReason,
     ResourceStatus,
 )
+from app.domain.eta import EtaOrigin
 from app.domain.incident_rules import ACTIVE_STATUSES, TERMINAL_STATUSES, reachable_statuses
 from app.models import (
     Incident,
@@ -20,6 +22,7 @@ from app.models import (
     Location,
     Organization,
     Resource,
+    ResourceAssignment,
     ResourceType,
 )
 from app.models.location import point
@@ -148,9 +151,15 @@ async def test_each_history_is_consistent_with_the_incident(session: AsyncSessio
             if event.event_type == IncidentEventType.STATUS_CHANGED:
                 assert event.payload["from"] == status
                 status = IncidentStatus(event.payload["to"])
-            else:
-                assert event.event_type == IncidentEventType.NOTE_ADDED
+            elif event.event_type == IncidentEventType.NOTE_ADDED:
                 assert "(simulado)" in event.payload["text"]
+            else:
+                assert event.event_type in {
+                    IncidentEventType.RESOURCE_ASSIGNED,
+                    IncidentEventType.RESOURCE_ARRIVED,
+                    IncidentEventType.RESOURCE_RELEASED,
+                }
+                assert event.payload["resource"].startswith("SIM-")
         assert status == incident.status
         # La última actividad del historial es la última modificación.
         assert incident.updated_at == events[-1].occurred_at
@@ -268,7 +277,7 @@ async def test_existing_resource_with_a_seed_code_is_left_alone(session: AsyncSe
             type_id=resource_type.id,
             organization_id=organization.id,
             status=ResourceStatus.AVAILABLE,
-            municipality="Oviedo",
+            base=Location(municipality="Oviedo"),
         )
     )
     await session.commit()
@@ -309,3 +318,44 @@ async def test_existing_locations_are_not_touched(session: AsyncSession) -> None
         await session.refresh(location)
     assert (moved.latitude, moved.longitude) == (43.4, -5.8)
     assert cleared.latitude is None
+
+
+# --- Asignaciones (Fase 4) ------------------------------------------------------
+
+
+async def test_assignments_are_consistent_with_resources(session: AsyncSession) -> None:
+    await seed(session, DEMO_PASSWORD)
+
+    assignments = (await session.scalars(select(ResourceAssignment))).all()
+    active = {a.resource_id: a for a in assignments if a.released_at is None}
+    for resource in await session.scalars(select(Resource)):
+        # En servicio ⇔ con una asignación activa que empezó cuando cambió su estado.
+        if resource.status == ResourceStatus.IN_SERVICE:
+            assert resource.id in active, resource.code
+            assert resource.status_changed_at == active[resource.id].assigned_at
+        else:
+            assert resource.id not in active, resource.code
+    released = [a for a in assignments if a.released_at is not None]
+    assert {a.release_reason for a in released} == {
+        ReleaseReason.COMPLETED,
+        ReleaseReason.INCIDENT_CLOSED,
+    }
+    for assignment in released:
+        released_resource = await session.get(Resource, assignment.resource_id)
+        assert released_resource is not None
+        assert released_resource.status_changed_at == assignment.released_at
+    assert all(a.is_simulated for a in assignments)
+
+
+async def test_assignments_store_the_estimated_eta(session: AsyncSession) -> None:
+    await seed(session, DEMO_PASSWORD)
+
+    assignments = (await session.scalars(select(ResourceAssignment))).all()
+    with_eta = [a for a in assignments if a.eta_minutes is not None]
+    assert with_eta and all(a.eta_origin == EtaOrigin.BASE for a in with_eta)
+    # El aviso sanitario reciente no tiene coordenadas: su asignación no tiene ETA.
+    medical = await session.get(Incident, incident_id("medical-gijon"))
+    assert medical is not None
+    assert medical.status == IncidentStatus.RESOURCES_ASSIGNED
+    (unlocated,) = [a for a in assignments if a.incident_id == medical.id]
+    assert unlocated.eta_minutes is None

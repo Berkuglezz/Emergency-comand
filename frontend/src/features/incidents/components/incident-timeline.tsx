@@ -4,8 +4,9 @@ import { useTranslation } from "react-i18next"
 
 import { Panel, type PanelStatus } from "@/components/ops/panel"
 import { PRIORITY_CODES } from "@/components/ops/priority"
-import { formatCoordinates, formatDateTime } from "@/lib/format"
+import { formatCoordinates, formatDateTime, formatNumber } from "@/lib/format"
 import { type CodeGroup, useCodeLabel } from "@/lib/code-label"
+import { RELEASE_REASON_CODES as RELEASE_REASONS } from "@/features/assignments/presentation"
 import { cn } from "@/lib/utils"
 
 import { useIncidentEvents } from "../hooks"
@@ -151,7 +152,49 @@ function describeEvent(
           from: status(payload.from),
           to: status(payload.to),
         }),
-        detail: reason ? t("incidents.timeline.reason", { reason }) : null,
+        detail: reason
+          ? t("incidents.timeline.reason", { reason })
+          : payload.cause === "assignment"
+            ? t("incidents.timeline.automaticByAssignment")
+            : null,
+      }
+    }
+    case "resource_assigned": {
+      const eta = payload.eta as { minutes?: unknown; distance_km?: unknown } | null
+      const from = text(payload.reassigned_from)
+      return {
+        text: t("incidents.timeline.resourceAssigned", { resource: text(payload.resource) ?? "—" }),
+        detail: [
+          typeof eta?.minutes === "number" && typeof eta.distance_km === "number"
+            ? t("incidents.timeline.eta", {
+                minutes: formatNumber(eta.minutes),
+                distance: formatNumber(eta.distance_km),
+              })
+            : t("incidents.timeline.noEta"),
+          from ? t("incidents.timeline.reassignedFrom", { from }) : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      }
+    }
+    case "resource_arrived":
+      return {
+        text: t("incidents.timeline.resourceArrived", { resource: text(payload.resource) ?? "—" }),
+        detail: null,
+      }
+    case "resource_released": {
+      const reason = text(payload.reason)
+      const to = text(payload.reassigned_to)
+      return {
+        text: t("incidents.timeline.resourceReleased", { resource: text(payload.resource) ?? "—" }),
+        detail: [
+          reason && (RELEASE_REASONS as string[]).includes(reason)
+            ? t(`assignments.reasons.${reason as (typeof RELEASE_REASONS)[number]}`)
+            : reason,
+          to ? t("incidents.timeline.reassignedTo", { to }) : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
       }
     }
     case "priority_changed":

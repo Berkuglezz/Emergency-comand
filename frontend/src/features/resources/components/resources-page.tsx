@@ -152,6 +152,14 @@ function ResourceTable({ items }: { items: Resource[] }) {
               <div className="flex items-center gap-1">
                 <ResourceStatusPill status={resource.status} />
                 {!resource.is_active && <DeactivatedPill />}
+                {resource.current_assignment && (
+                  <span className="font-data text-xs text-muted-foreground">
+                    <span className="sr-only">{t("resources.assignment.assignedTo")} </span>
+                    {t("resources.assignment.inIncident", {
+                      code: resource.current_assignment.incident_code,
+                    })}
+                  </span>
+                )}
               </div>
             </TableCell>
             <TableCell className="max-w-80">
@@ -164,7 +172,7 @@ function ResourceTable({ items }: { items: Resource[] }) {
               <ResourceTypeLabel type={resource.type} />
             </TableCell>
             <TableCell className="max-w-64 truncate">{resource.organization.name}</TableCell>
-            <TableCell>{resource.municipality}</TableCell>
+            <TableCell>{resource.base.municipality}</TableCell>
             <TableCell className="font-data text-muted-foreground">
               <time dateTime={resource.status_changed_at}>
                 {formatDateTime(resource.status_changed_at)}

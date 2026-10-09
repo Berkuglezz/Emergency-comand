@@ -7,7 +7,9 @@ import {
   FolderTree,
   Inbox,
   ListChecks,
+  LogOut,
   type LucideIcon,
+  MapPinCheck,
   MapPinned,
   NotebookPen,
   PencilLine,
@@ -62,10 +64,14 @@ export const EVENT_ICONS: Record<IncidentEventType, LucideIcon> = {
   note_added: NotebookPen,
   parent_changed: FolderTree,
   location_changed: MapPinned,
+  resource_assigned: Truck,
+  resource_arrived: MapPinCheck,
+  resource_released: LogOut,
 }
 
 const KNOWN_ERRORS = [
   "version_conflict",
+  "concurrent_update",
   "invalid_transition",
   "incident_closed",
   "invalid_parent",

@@ -14,6 +14,7 @@ from app.domain.exceptions import PermissionDeniedError
 from app.models import User
 from app.repositories.health import DatabaseHealthRepository
 from app.repositories.organizations import OrganizationRepository
+from app.services.assignments import AssignmentService
 from app.services.auth import AuthService
 from app.services.dashboard import DashboardService
 from app.services.health import HealthService
@@ -56,12 +57,17 @@ def get_dashboard_service(session: SessionDep) -> DashboardService:
     return DashboardService(session)
 
 
+def get_assignment_service(session: SessionDep) -> AssignmentService:
+    return AssignmentService(session)
+
+
 HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 OrganizationServiceDep = Annotated[OrganizationService, Depends(get_organization_service)]
 IncidentServiceDep = Annotated[IncidentService, Depends(get_incident_service)]
 ResourceServiceDep = Annotated[ResourceService, Depends(get_resource_service)]
 DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)]
+AssignmentServiceDep = Annotated[AssignmentService, Depends(get_assignment_service)]
 
 
 # --- Autenticación y autorización -----------------------------------------

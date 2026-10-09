@@ -25,8 +25,8 @@ class ComponentStatus(StrEnum):
 class IncidentStatus(StrEnum):
     RECEIVED = "received"
     ASSESSING = "assessing"
-    # Existe en el modelo, pero no es alcanzable hasta que haya asignación de
-    # recursos (fase posterior). Ver `domain/incident_rules.py`.
+    # Solo se alcanza automáticamente al asignar recursos (Fase 4). Ver
+    # `domain/incident_rules.py`.
     RESOURCES_ASSIGNED = "resources_assigned"
     IN_PROGRESS = "in_progress"
     CONTROLLED = "controlled"
@@ -61,6 +61,9 @@ class IncidentEventType(StrEnum):
     NOTE_ADDED = "note_added"
     PARENT_CHANGED = "parent_changed"
     LOCATION_CHANGED = "location_changed"
+    RESOURCE_ASSIGNED = "resource_assigned"
+    RESOURCE_ARRIVED = "resource_arrived"
+    RESOURCE_RELEASED = "resource_released"
 
 
 # --- Recursos ---------------------------------------------------------------
@@ -79,3 +82,20 @@ class ResourceStatus(StrEnum):
     AVAILABLE = "available"
     IN_SERVICE = "in_service"
     OUT_OF_SERVICE = "out_of_service"
+
+
+class ReleaseReason(StrEnum):
+    """Motivo de la retirada de un recurso de un incidente."""
+
+    COMPLETED = "completed"
+    NOT_NEEDED = "not_needed"
+    UNAVAILABLE = "unavailable"
+    # Los dos siguientes los pone el sistema.
+    REASSIGNED = "reassigned"
+    INCIDENT_CLOSED = "incident_closed"
+
+
+class StatusChangeCause(StrEnum):
+    """Causa de un cambio de estado automático del incidente."""
+
+    ASSIGNMENT = "assignment"

@@ -21,7 +21,7 @@ Emergency Command es un **prototipo demostrable** de plataforma de coordinación
 | Fase 1: base técnica | **Completada** (ver §2.1 y §11.1) |
 | Fase 2: incidentes, recursos y dashboard funcional | **Completada** (ver §2.3 y §11.2) |
 | Fase 3: geolocalización (PostGIS + `Location`) y mapa funcional | **Completada** (ver §2.6 y §11.3) |
-| Fase 4: asignación de recursos y ETA | **Especificada, pendiente de iniciar** (alcance en §2.8; fuera de alcance en §2.9; criterios en §11.4). La 4.1 empieza solo con indicación expresa |
+| Fase 4: asignación de recursos y ETA | **Completada** (ver §2.8 y §11.4) |
 
 Trabaja **solo** en el alcance de la fase autorizada. Todo lo demás está fuera de alcance aunque parezca útil o rápido de añadir.
 
@@ -179,11 +179,11 @@ GPS de recursos, recursos en el mapa, asignaciones, rutas, ETA, OSRM, distancias
 
 Si una tarea de Fase 3 parece requerir algo de esta lista, **pregunta antes**.
 
-### 2.8 Fase 4: asignación de recursos y ETA (especificada)
+### 2.8 Fase 4: asignación de recursos y ETA (completada)
 
-Especificación aprobada el 2026-10-08. **Principio rector: el sistema informa → la persona responsable decide → el sistema ejecuta.** El sistema ordena candidatos y marca tipos sugeridos, pero nunca preselecciona ni asigna automáticamente (eso no es IA ni recomendación automática; la IA es Fase 8).
+Especificación aprobada el 2026-10-08 y fase cerrada el 2026-10-09. **Principio rector: el sistema informa → la persona responsable decide → el sistema ejecuta.** El sistema ordena candidatos y marca tipos sugeridos, pero nunca preselecciona ni asigna automáticamente (eso no es IA ni recomendación automática; la IA es Fase 8).
 
-Se implementa por etapas; cada una se verifica, se resume y espera aprobación:
+Se implementó por etapas, cada una verificada y aprobada antes de seguir:
 
 | Etapa | Contenido |
 |---|---|
@@ -253,6 +253,43 @@ Se implementa por etapas; cada una se verifica, se resume y espera aprobación:
 Posiciones GPS o móviles de recursos (`resource_positions`), rutas por carretera, OSRM o cualquier API externa o de pago, WebSockets, polling, Redis o tiempo real, preselección o asignación automática, recomendaciones de IA/Ollama, hospitales, notificaciones, estadísticas, auditoría (`AuditLog`), simulador, historial completo de estados de recursos, capa global de bases en el mapa, tiempo de activación en la ETA, isócronas, zonas de cobertura, clustering y layout móvil.
 
 Si una tarea de Fase 4 parece requerir algo de esta lista, **pregunta antes**.
+
+### 2.10 Objetivos de diseño registrados (sin fase asignada)
+
+Registrados el 2026-10-09. **No autorizan implementar nada**: ninguno forma parte del alcance de la Fase 4. Cada uno se abordará cuando se le asigne fase o etapa y se apruebe su propuesta.
+
+#### 2.10.1 Mejora de interfaz: el mapa como elemento principal
+
+Objetivo: que el mapa sea el protagonista visual del centro de mando.
+
+- Con los paneles contraídos, el mapa ocupa aproximadamente el **70–80 %** del espacio de trabajo. Esto sustituirá a la disposición actual de la Fase 3 (mapa ~55 % y lista debajo, §2.6).
+- La lista de incidentes y el resumen de recursos pasan a ser **paneles secundarios compactos y contraíbles**.
+- Al seleccionar un incidente o un recurso, su detalle se muestra **sin perder el contexto del mapa**: el mapa sigue visible y no se navega a otra pantalla.
+- Se mantienen:
+  - el diseño oscuro y los tokens de §7;
+  - la legibilidad y la accesibilidad (teclado, foco, nombres accesibles, `prefers-reduced-motion`);
+  - la sincronización mapa ↔ lista ↔ ficha por URL.
+- **Límites:**
+  - Es un cambio de distribución, no de funcionalidad.
+  - No añade rutas, GPS, capas nuevas ni nada fuera de la fase aprobada en ese momento. Las prohibiciones de §2.7 y §2.9 siguen vigentes.
+- **Procedimiento:**
+  1. Revisar la interfaz actual.
+  2. Proponer una distribución concreta: zonas, tamaños, comportamiento al contraer y expandir los paneles, y dónde se muestra la ficha.
+  3. Esperar la aprobación **antes** de tocar código.
+
+#### 2.10.2 Decisión futura de distribución: programa de escritorio
+
+Objetivo: no cerrar la puerta a distribuir la aplicación como programa de escritorio para Windows (instalador).
+
+- La aplicación **sigue siendo y funcionando como aplicación web**; el escritorio sería una forma adicional de distribuirla.
+- El empaquetado reutilizaría el frontend React y el backend existentes.
+- Cuando llegue el momento, se estudiará **Tauri como primera opción** y solo entonces se comparará con Electron.
+- **Ahora no se hace nada para este objetivo:**
+  - no se añaden dependencias;
+  - no se integran Tauri ni Electron;
+  - no se modifican la arquitectura del backend (§4) ni la base de datos.
+- Lo único que pide hoy este objetivo es no introducir en el frontend nada que impida empaquetarlo más adelante. Si una decisión pudiera afectar a ese empaquetado, se señala y se pregunta.
+- La elección de tecnología y la forma de empaquetar el backend y la base de datos son decisiones de §3 pendientes, que requerirán una propuesta escrita y una confirmación explícita.
 
 ---
 
@@ -569,22 +606,22 @@ La Fase 3 se considera terminada cuando (todos cumplidos y verificados al cierre
 
 ### 11.4 Fase 4
 
-La Fase 4 se considerará terminada cuando (pendiente; se marcarán al cierre):
+La Fase 4 se considera terminada cuando (todos cumplidos y verificados al cierre, 2026-10-09):
 
-- [ ] Cada recurso tiene su base como `Location` 1:1 y el seed les da coordenadas válidas dentro de Asturias, sin instalaciones reales.
-- [ ] Cada tipo de recurso tiene velocidad media; la ETA es `ceil(haversine × 1.4 / velocidad × 60)`, con distancia de 1 decimal, `origin: "base"`, calculada localmente y sin tiempo de activación.
-- [ ] La ETA se guarda al asignar y no cambia retroactivamente; siempre se presenta como «estimado».
-- [ ] Un recurso nunca tiene dos asignaciones activas: lo garantiza el índice único parcial y se prueba con concurrencia; un incidente admite varios recursos.
-- [ ] Asignar, marcar «en el lugar», retirar (con motivo obligatorio) y reasignar (explícita y atómica) actualizan de forma coherente recurso, incidente, `version` e historial en una sola transacción.
-- [ ] `resources_assigned` solo se alcanza y se abandona automáticamente según §2.8; `arrived_at` no cambia el estado del incidente.
-- [ ] Cerrar o cancelar un incidente retira automáticamente sus asignaciones activas, con confirmación previa que enumera los recursos.
-- [ ] Ningún cambio manual de estado deja un recurso en contradicción con sus asignaciones.
-- [ ] Permisos de §2.8 aplicados en el backend y reflejados en la interfaz (el operador marca la llegada, pero no asigna ni retira).
-- [ ] Candidatos ordenados por ETA con tipos sugeridos marcados, sin preselección ni asignación automática.
-- [ ] Ficha del incidente, panel lateral, ficha de recurso y mapa (solo bases de los asignados al incidente seleccionado) muestran asignaciones y ETA con datos reales.
-- [ ] Ningún elemento de §2.9 implementado.
-- [ ] Tests, `ruff`, `mypy`, `alembic check`, ESLint, type-check y build pasan; verificado desde un clon limpio.
-- [ ] README y `docs/architecture.md` actualizados.
+- [x] Cada recurso tiene su base como `Location` 1:1 y el seed les da coordenadas válidas dentro de Asturias, sin instalaciones reales.
+- [x] Cada tipo de recurso tiene velocidad media; la ETA es `ceil(haversine × 1.4 / velocidad × 60)`, con distancia de 1 decimal, `origin: "base"`, calculada localmente y sin tiempo de activación.
+- [x] La ETA se guarda al asignar y no cambia retroactivamente; siempre se presenta como «estimado».
+- [x] Un recurso nunca tiene dos asignaciones activas: lo garantiza el índice único parcial y se prueba con concurrencia; un incidente admite varios recursos.
+- [x] Asignar, marcar «en el lugar», retirar (con motivo obligatorio) y reasignar (explícita y atómica) actualizan de forma coherente recurso, incidente, `version` e historial en una sola transacción.
+- [x] `resources_assigned` solo se alcanza y se abandona automáticamente según §2.8; `arrived_at` no cambia el estado del incidente.
+- [x] Cerrar o cancelar un incidente retira automáticamente sus asignaciones activas, con confirmación previa que enumera los recursos.
+- [x] Ningún cambio manual de estado deja un recurso en contradicción con sus asignaciones.
+- [x] Permisos de §2.8 aplicados en el backend y reflejados en la interfaz (el operador marca la llegada, pero no asigna ni retira).
+- [x] Candidatos ordenados por ETA con tipos sugeridos marcados, sin preselección ni asignación automática.
+- [x] Ficha del incidente, panel lateral, ficha de recurso y mapa (solo bases de los asignados al incidente seleccionado) muestran asignaciones y ETA con datos reales.
+- [x] Ningún elemento de §2.9 implementado.
+- [x] Tests (425 backend, 105 frontend), `ruff`, `mypy`, `alembic check`, ESLint, type-check y build pasan; verificado desde un clon limpio.
+- [x] README y `docs/architecture.md` actualizados.
 
 ---
 

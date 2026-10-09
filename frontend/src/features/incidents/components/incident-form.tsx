@@ -1,11 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { MapPinned, X } from "lucide-react"
-import { type ReactNode, useId, useMemo, useState } from "react"
+import { type ReactNode, useId, useMemo } from "react"
 import { useForm, useWatch } from "react-hook-form"
 import { useTranslation } from "react-i18next"
 import type { z } from "zod"
 
 import { FormField } from "@/components/ops/form-field"
+import { CoordinatesFieldset } from "@/features/map/coordinates-fieldset"
 import { PRIORITY_CODES } from "@/components/ops/priority"
 import { Button } from "@/components/ui/button"
 import { useCodeLabel } from "@/lib/code-label"
@@ -19,12 +19,10 @@ import {
   createIncidentFormSchema,
   DETAILS_FIELDS,
   type IncidentFormValues,
-  parseCoordinate,
   VEGETATION_CODES,
 } from "../form"
 import { useIncidents } from "../hooks"
 import type { IncidentType } from "../types"
-import { LocationPickerDialog } from "./location-picker-dialog"
 
 type Schema = ReturnType<typeof createIncidentFormSchema>
 
@@ -68,13 +66,10 @@ export function IncidentForm({
   })
   const { errors } = form.formState
 
-  const [picking, setPicking] = useState(false)
   const [latitudeText, longitudeText] = useWatch({
     control: form.control,
     name: ["latitude", "longitude"],
   })
-  const currentLatitude = parseCoordinate(latitudeText)
-  const currentLongitude = parseCoordinate(longitudeText)
   const setCoordinates = (latitude: string, longitude: string) => {
     const options = { shouldDirty: true, shouldValidate: form.formState.isSubmitted }
     form.setValue("latitude", latitude, options)
@@ -198,76 +193,21 @@ export function IncidentForm({
           </FormField>
         </div>
 
-        <FieldSet className="gap-3 rounded-lg border p-3">
-          <FieldLegend variant="label">{t("incidents.fields.coordinates")}</FieldLegend>
-          <p className="text-xs text-muted-foreground">{t("incidents.location.coordinatesHint")}</p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField
-              id={`${id}-latitude`}
-              label={t("incidents.fields.latitude")}
-              error={errors.latitude}
-            >
-              <Input
-                inputMode="decimal"
-                placeholder={t("incidents.location.latitudePlaceholder")}
-                className="font-data"
-                {...fieldProps(`${id}-latitude`, errors.latitude)}
-                {...form.register("latitude")}
-              />
-            </FormField>
-            <FormField
-              id={`${id}-longitude`}
-              label={t("incidents.fields.longitude")}
-              error={errors.longitude}
-            >
-              <Input
-                inputMode="decimal"
-                placeholder={t("incidents.location.longitudePlaceholder")}
-                className="font-data"
-                {...fieldProps(`${id}-longitude`, errors.longitude)}
-                {...form.register("longitude")}
-              />
-            </FormField>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setPicking(true)
-              }}
-            >
-              <MapPinned data-icon="inline-start" aria-hidden />
-              {t("incidents.location.pick")}
-            </Button>
-            {(latitudeText.trim() !== "" || longitudeText.trim() !== "") && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setCoordinates("", "")
-                }}
-              >
-                <X data-icon="inline-start" aria-hidden />
-                {t("incidents.location.clear")}
-              </Button>
-            )}
-          </div>
-          <LocationPickerDialog
-            open={picking}
-            onOpenChange={setPicking}
-            initial={
-              currentLatitude !== null && currentLongitude !== null
-                ? [currentLongitude, currentLatitude]
-                : null
-            }
-            onConfirm={(latitude, longitude) => {
-              setCoordinates(String(latitude), String(longitude))
-            }}
-          />
-        </FieldSet>
+        <CoordinatesFieldset
+          id={id}
+          legend={t("incidents.fields.coordinates")}
+          latitude={{
+            register: form.register("latitude"),
+            error: errors.latitude,
+            value: latitudeText,
+          }}
+          longitude={{
+            register: form.register("longitude"),
+            error: errors.longitude,
+            value: longitudeText,
+          }}
+          onChange={setCoordinates}
+        />
 
         <FormField
           id={`${id}-description`}

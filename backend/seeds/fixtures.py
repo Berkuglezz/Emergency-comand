@@ -19,7 +19,19 @@ Las horas de recursos e incidentes son relativas al momento de ejecutar el seed.
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.domain.enums import IncidentPriority, IncidentStatus, ResourceStatus, RoleCode
+from app.domain.enums import (
+    IncidentPriority,
+    IncidentStatus,
+    ReleaseReason,
+    ResourceStatus,
+    RoleCode,
+)
+from app.domain.incident_rules import (
+    INITIAL_STATUS,
+    TERMINAL_STATUSES,
+    status_after_assignment,
+    status_after_last_release,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,16 +93,36 @@ USERS: tuple[DemoUser, ...] = (
 
 
 @dataclass(frozen=True, slots=True)
+class DemoBase:
+    """Base simulada de un recurso: municipio y coordenadas aproximadas
+    (3 decimales) en una zona genérica, nunca sobre una instalación real."""
+
+    municipality: str
+    coordinates: tuple[float, float]
+    description: str = "Base (ubicación simulada)"
+
+
+@dataclass(frozen=True, slots=True)
 class DemoResource:
     code: str
     name: str
     type_code: str
     organization_code: str
-    municipality: str
+    base: DemoBase
     status: ResourceStatus
     # Minutos desde el último cambio de estado.
     status_minutes_ago: int
 
+
+# Bases simuladas: los recursos de una organización en un municipio comparten
+# punto (cada uno con su propia fila `Location`).
+_BASE_BOV_OVIEDO = DemoBase("Oviedo", (43.352, -5.873))
+_BASE_BOV_SIERO = DemoBase("Siero", (43.386, -5.672))
+_BASE_SGI_GIJON = DemoBase("Gijón", (43.528, -5.675))
+_BASE_SGI_OVIEDO = DemoBase("Oviedo", (43.366, -5.83))
+_BASE_PCA_AVILES = DemoBase("Avilés", (43.548, -5.93))
+_BASE_CAS_OVIEDO = DemoBase("Oviedo", (43.36, -5.855))
+_BASE_CAS_SIERO = DemoBase("Siero", (43.4, -5.645))
 
 _BOV = "sim-bomberos-oviedo"
 _SGI = "sim-sanitario-gijon"
@@ -101,63 +133,143 @@ _IN = ResourceStatus.IN_SERVICE
 _OUT = ResourceStatus.OUT_OF_SERVICE
 
 RESOURCES: tuple[DemoResource, ...] = (
-    DemoResource("SIM-BOV-01", "Autobomba 1 (simulado)", "fire_engine", _BOV, "Oviedo", _IN, 83),
-    DemoResource("SIM-BOV-02", "Autobomba 2 (simulado)", "fire_engine", _BOV, "Oviedo", _IN, 21),
-    DemoResource("SIM-BOV-03", "Autobomba 3 (simulado)", "fire_engine", _BOV, "Oviedo", _AV, 640),
-    DemoResource("SIM-BOV-04", "Autobomba 4 (simulado)", "fire_engine", _BOV, "Siero", _OUT, 2900),
     DemoResource(
-        "SIM-BOV-05", "Vehículo de rescate 1 (simulado)", "rescue_vehicle", _BOV, "Oviedo", _IN, 140
+        "SIM-BOV-01", "Autobomba 1 (simulado)", "fire_engine", _BOV, _BASE_BOV_OVIEDO, _IN, 87
     ),
     DemoResource(
-        "SIM-BOV-06", "Vehículo de rescate 2 (simulado)", "rescue_vehicle", _BOV, "Oviedo", _AV, 410
+        "SIM-BOV-02", "Autobomba 2 (simulado)", "fire_engine", _BOV, _BASE_BOV_OVIEDO, _IN, 21
     ),
     DemoResource(
-        "SIM-BOV-07", "Vehículo de mando 1 (simulado)", "command_vehicle", _BOV, "Oviedo", _AV, 900
+        "SIM-BOV-03", "Autobomba 3 (simulado)", "fire_engine", _BOV, _BASE_BOV_OVIEDO, _AV, 640
     ),
     DemoResource(
-        "SIM-SGI-01", "Ambulancia SVA 1 (simulado)", "ambulance_advanced", _SGI, "Gijón", _IN, 2
+        "SIM-BOV-04", "Autobomba 4 (simulado)", "fire_engine", _BOV, _BASE_BOV_SIERO, _OUT, 2900
     ),
     DemoResource(
-        "SIM-SGI-02", "Ambulancia SVA 2 (simulado)", "ambulance_advanced", _SGI, "Gijón", _AV, 380
+        "SIM-BOV-05",
+        "Vehículo de rescate 1 (simulado)",
+        "rescue_vehicle",
+        _BOV,
+        _BASE_BOV_OVIEDO,
+        _IN,
+        220,
     ),
     DemoResource(
-        "SIM-SGI-03", "Ambulancia SVB 1 (simulado)", "ambulance_basic", _SGI, "Gijón", _AV, 120
+        "SIM-BOV-06",
+        "Vehículo de rescate 2 (simulado)",
+        "rescue_vehicle",
+        _BOV,
+        _BASE_BOV_OVIEDO,
+        _AV,
+        35,
     ),
     DemoResource(
-        "SIM-SGI-04", "Ambulancia SVB 2 (simulado)", "ambulance_basic", _SGI, "Gijón", _AV, 260
+        "SIM-BOV-07",
+        "Vehículo de mando 1 (simulado)",
+        "command_vehicle",
+        _BOV,
+        _BASE_BOV_OVIEDO,
+        _AV,
+        900,
     ),
     DemoResource(
-        "SIM-SGI-05", "Ambulancia SVB 3 (simulado)", "ambulance_basic", _SGI, "Oviedo", _OUT, 1500
+        "SIM-SGI-01",
+        "Ambulancia SVA 1 (simulado)",
+        "ambulance_advanced",
+        _SGI,
+        _BASE_SGI_GIJON,
+        _IN,
+        2,
+    ),
+    DemoResource(
+        "SIM-SGI-02",
+        "Ambulancia SVA 2 (simulado)",
+        "ambulance_advanced",
+        _SGI,
+        _BASE_SGI_GIJON,
+        _AV,
+        380,
+    ),
+    DemoResource(
+        "SIM-SGI-03",
+        "Ambulancia SVB 1 (simulado)",
+        "ambulance_basic",
+        _SGI,
+        _BASE_SGI_GIJON,
+        _AV,
+        120,
+    ),
+    DemoResource(
+        "SIM-SGI-04",
+        "Ambulancia SVB 2 (simulado)",
+        "ambulance_basic",
+        _SGI,
+        _BASE_SGI_GIJON,
+        _AV,
+        260,
+    ),
+    DemoResource(
+        "SIM-SGI-05",
+        "Ambulancia SVB 3 (simulado)",
+        "ambulance_basic",
+        _SGI,
+        _BASE_SGI_OVIEDO,
+        _OUT,
+        1500,
     ),
     DemoResource(
         "SIM-PCA-01",
         "Unidad de protección civil 1 (simulado)",
         "civil_protection_unit",
         _PCA,
-        "Avilés",
+        _BASE_PCA_AVILES,
         _IN,
-        230,
+        30,
     ),
     DemoResource(
         "SIM-PCA-02",
         "Unidad de protección civil 2 (simulado)",
         "civil_protection_unit",
         _PCA,
-        "Avilés",
+        _BASE_PCA_AVILES,
         _AV,
-        700,
+        1370,
     ),
     DemoResource(
-        "SIM-PCA-03", "Apoyo logístico 1 (simulado)", "logistics_support", _PCA, "Avilés", _AV, 1100
+        "SIM-PCA-03",
+        "Apoyo logístico 1 (simulado)",
+        "logistics_support",
+        _PCA,
+        _BASE_PCA_AVILES,
+        _AV,
+        1100,
     ),
     DemoResource(
-        "SIM-PCA-04", "Apoyo logístico 2 (simulado)", "logistics_support", _PCA, "Avilés", _AV, 95
+        "SIM-PCA-04",
+        "Apoyo logístico 2 (simulado)",
+        "logistics_support",
+        _PCA,
+        _BASE_PCA_AVILES,
+        _AV,
+        95,
     ),
     DemoResource(
-        "SIM-CAS-01", "Vehículo de mando 2 (simulado)", "command_vehicle", _CAS, "Oviedo", _AV, 1800
+        "SIM-CAS-01",
+        "Vehículo de mando 2 (simulado)",
+        "command_vehicle",
+        _CAS,
+        _BASE_CAS_OVIEDO,
+        _AV,
+        1800,
     ),
     DemoResource(
-        "SIM-CAS-02", "Apoyo logístico 3 (simulado)", "logistics_support", _CAS, "Siero", _AV, 3000
+        "SIM-CAS-02",
+        "Apoyo logístico 3 (simulado)",
+        "logistics_support",
+        _CAS,
+        _BASE_CAS_SIERO,
+        _AV,
+        3000,
     ),
 )
 
@@ -167,13 +279,25 @@ RESOURCES: tuple[DemoResource, ...] = (
 
 @dataclass(frozen=True, slots=True)
 class DemoStep:
-    """Paso del historial: un cambio de estado o una nota, `minute` minutos
-    después de la notificación."""
+    """Paso del historial, `minute` minutos después de la notificación. Exactamente
+    una acción: cambio de estado, nota, asignar un recurso (código), marcar su
+    llegada o retirarlo con un motivo."""
 
     minute: int
     status: IncidentStatus | None = None
     reason: str | None = None
     note: str | None = None
+    assign: str | None = None
+    arrive: str | None = None
+    release: str | None = None
+    release_reason: ReleaseReason | None = None
+
+    @property
+    def actions(self) -> int:
+        return sum(
+            value is not None
+            for value in (self.status, self.note, self.assign, self.arrive, self.release)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,13 +321,28 @@ class DemoIncident:
 
     @property
     def status(self) -> IncidentStatus:
-        """Estado final: el del último cambio de estado del historial."""
-        statuses = [step.status for step in self.steps if step.status is not None]
-        return statuses[-1] if statuses else IncidentStatus.RECEIVED
+        """Estado final del historial, con los cambios manuales y los automáticos
+        de la asignación de recursos (mismas reglas que el servicio)."""
+        status = INITIAL_STATUS
+        active: set[str] = set()
+        for step in sorted(self.steps, key=lambda s: s.minute):
+            if step.status is not None:
+                status = step.status
+                if status in TERMINAL_STATUSES:
+                    active.clear()
+            elif step.assign:
+                active.add(step.assign)
+                status = status_after_assignment(status)
+            elif step.release:
+                active.discard(step.release)
+                if not active:
+                    status = status_after_last_release(status)
+        return status
 
 
 _ST = IncidentStatus
 _PR = IncidentPriority
+_RR = ReleaseReason
 
 # Ordenados del más antiguo al más reciente: así los códigos `INC-` siguen el
 # orden de notificación. El padre va siempre antes que sus hijos.
@@ -221,6 +360,7 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         affected_people=0,
         steps=(
             DemoStep(6, _ST.ASSESSING),
+            DemoStep(12, assign="SIM-PCA-02"),
             DemoStep(18, _ST.IN_PROGRESS),
             DemoStep(40, note="Perímetro de seguridad establecido (simulado)"),
             DemoStep(130, _ST.CONTROLLED),
@@ -276,7 +416,9 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         parent_key="storm-central",
         steps=(
             DemoStep(10, _ST.ASSESSING),
+            DemoStep(20, assign="SIM-BOV-05"),
             DemoStep(26, _ST.IN_PROGRESS),
+            DemoStep(60, arrive="SIM-BOV-05"),
             DemoStep(90, note="Nivel del agua estable (simulado)"),
         ),
     ),
@@ -305,8 +447,11 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         affected_people=1,
         steps=(
             DemoStep(10, _ST.ASSESSING),
+            DemoStep(20, assign="SIM-BOV-06"),
             DemoStep(30, _ST.IN_PROGRESS),
+            DemoStep(70, arrive="SIM-BOV-06"),
             DemoStep(112, _ST.CONTROLLED),
+            DemoStep(115, release="SIM-BOV-06", release_reason=_RR.COMPLETED),
         ),
     ),
     DemoIncident(
@@ -321,8 +466,11 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         details={"affected_hectares": "12.50", "vegetation": "forest"},
         steps=(
             DemoStep(3, _ST.ASSESSING),
+            DemoStep(8, assign="SIM-BOV-01"),
             DemoStep(12, _ST.IN_PROGRESS),
+            DemoStep(30, arrive="SIM-BOV-01"),
             DemoStep(50, note="Frente principal en zona de matorral (simulado)"),
+            DemoStep(74, assign="SIM-BOV-02"),
         ),
     ),
     DemoIncident(
@@ -346,7 +494,11 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         coordinates=(43.56, -5.668),
         reported_minutes_ago=45,
         affected_people=0,
-        steps=(DemoStep(8, _ST.ASSESSING), DemoStep(20, _ST.IN_PROGRESS)),
+        steps=(
+            DemoStep(8, _ST.ASSESSING),
+            DemoStep(15, assign="SIM-PCA-01"),
+            DemoStep(20, _ST.IN_PROGRESS),
+        ),
     ),
     DemoIncident(
         key="structure-fire-aviles",
@@ -382,5 +534,6 @@ INCIDENTS: tuple[DemoIncident, ...] = (
         coordinates=None,
         reported_minutes_ago=3,
         affected_people=1,
+        steps=(DemoStep(1, assign="SIM-SGI-01"),),
     ),
 )

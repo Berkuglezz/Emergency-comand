@@ -36,8 +36,8 @@ def test_history_steps_are_ordered_and_never_in_the_future() -> None:
         assert minutes == sorted(set(minutes)), fixture.key
         assert all(0 < minute < fixture.reported_minutes_ago for minute in minutes), fixture.key
         for step in fixture.steps:
-            # Cada paso es un cambio de estado o una nota, no ambos.
-            assert (step.status is None) != (step.note is None), fixture.key
+            # Cada paso es exactamente una acción.
+            assert step.actions == 1, fixture.key
 
 
 def test_coordinates_are_approximate_and_inside_the_demo_area() -> None:
@@ -57,3 +57,11 @@ def test_some_active_incidents_have_no_coordinates_on_purpose() -> None:
     unlocated = [f for f in INCIDENTS if f.coordinates is None]
     assert unlocated
     assert all(f.status in ACTIVE_STATUSES for f in unlocated)
+
+
+def test_resource_bases_are_inside_the_demo_area() -> None:
+    for fixture in RESOURCES:
+        latitude, longitude = fixture.base.coordinates
+        assert round(latitude, 3) == latitude and round(longitude, 3) == longitude, fixture.code
+        assert DEMO_AREA.contains(latitude, longitude), fixture.code
+        assert "simulada" in fixture.base.description

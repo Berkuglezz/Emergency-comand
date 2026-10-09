@@ -3,11 +3,13 @@ import { type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { ConfirmDialog } from "@/components/ops/confirm-dialog"
+import { EtaText } from "@/components/ops/eta-text"
 import { IncidentMarker } from "@/components/ops/incident-marker"
 import { KpiTile } from "@/components/ops/kpi-tile"
 import { Panel } from "@/components/ops/panel"
 import { PRIORITY_CODES } from "@/components/ops/priority"
 import { PriorityBadge } from "@/components/ops/priority-badge"
+import { ResourceMarker } from "@/components/ops/resource-marker"
 import { StatusPill } from "@/components/ops/status-pill"
 import { TONE_ICONS, TONE_STYLES, TONES } from "@/components/ops/tones"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -36,6 +38,8 @@ import { cn } from "@/lib/utils"
 import {
   DATA_SAMPLES,
   KPI_SAMPLES,
+  ETA_SAMPLE,
+  ETA_SAMPLE_ASSIGNED_AT,
   MARKER_SAMPLES,
   RADII,
   SURFACE_TOKENS,
@@ -330,6 +334,32 @@ export function DesignSystemPage() {
             />
           </div>
         </Row>
+      </Section>
+
+      <Section title={t("designSystem.sections.resourceMarker")}>
+        <Row>
+          <ResourceMarker
+            items={[
+              {
+                code: DATA_SAMPLES.resourceCode,
+                typeLabel: t("resourceTypes.fire_engine"),
+                etaLabel: t("ops.eta.short", {
+                  minutes: ETA_SAMPLE.minutes,
+                  distance: ETA_SAMPLE.distance_km,
+                }),
+              },
+            ]}
+          />
+        </Row>
+      </Section>
+
+      <Section title={t("designSystem.sections.etaText")}>
+        <div className="flex flex-col gap-2">
+          <EtaText eta={ETA_SAMPLE} />
+          <EtaText eta={ETA_SAMPLE} assignedAt={ETA_SAMPLE_ASSIGNED_AT} />
+          <EtaText eta={null} unavailable="incident_without_coordinates" />
+          <EtaText eta={null} unavailable="resource_without_position" />
+        </div>
       </Section>
 
       <Section title={t("designSystem.sections.statusPill")}>

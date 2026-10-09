@@ -11,11 +11,13 @@ from app.domain.incident_rules import (
     can_transition,
     is_active,
     reachable_statuses,
+    status_after_assignment,
+    status_after_last_release,
 )
 
 S = IncidentStatus
 
-# Flujo aprobado para la Fase 2 (CLAUDE.md §2.3 y decisión 4).
+# Flujo manual aprobado (CLAUDE.md §2.3 y §2.8).
 EXPECTED_TRANSITIONS = {
     (S.RECEIVED, S.ASSESSING),
     (S.ASSESSING, S.IN_PROGRESS),
@@ -25,6 +27,9 @@ EXPECTED_TRANSITIONS = {
     (S.RECEIVED, S.CANCELLED),
     (S.ASSESSING, S.CANCELLED),
     (S.IN_PROGRESS, S.CANCELLED),
+    # Fase 4: desde `resources_assigned` (al que solo se llega asignando).
+    (S.RESOURCES_ASSIGNED, S.IN_PROGRESS),
+    (S.RESOURCES_ASSIGNED, S.CANCELLED),
 }
 
 
@@ -39,9 +44,36 @@ def test_flow_starts_at_received_and_must_pass_through_assessing() -> None:
     assert not can_transition(S.RECEIVED, S.IN_PROGRESS)
 
 
-def test_resources_assigned_is_not_reachable_in_phase_2() -> None:
-    assert S.RESOURCES_ASSIGNED not in reachable_statuses()
-    assert reachable_statuses() == frozenset(IncidentStatus) - {S.RESOURCES_ASSIGNED}
+def test_resources_assigned_is_never_a_manual_target() -> None:
+    assert not any(can_transition(current, S.RESOURCES_ASSIGNED) for current in IncidentStatus)
+    # …pero se alcanza automáticamente al asignar recursos.
+    assert reachable_statuses() == frozenset(IncidentStatus)
+
+
+@pytest.mark.parametrize(
+    ("current", "expected"),
+    [
+        (S.RECEIVED, S.RESOURCES_ASSIGNED),
+        (S.ASSESSING, S.RESOURCES_ASSIGNED),
+        (S.RESOURCES_ASSIGNED, S.RESOURCES_ASSIGNED),
+        (S.IN_PROGRESS, S.IN_PROGRESS),
+        (S.CONTROLLED, S.CONTROLLED),
+    ],
+)
+def test_status_after_assignment(current: S, expected: S) -> None:
+    assert status_after_assignment(current) is expected
+
+
+@pytest.mark.parametrize(
+    ("current", "expected"),
+    [
+        (S.RESOURCES_ASSIGNED, S.ASSESSING),
+        (S.IN_PROGRESS, S.IN_PROGRESS),
+        (S.CONTROLLED, S.CONTROLLED),
+    ],
+)
+def test_status_after_last_release(current: S, expected: S) -> None:
+    assert status_after_last_release(current) is expected
 
 
 def test_controlled_cannot_be_cancelled() -> None:

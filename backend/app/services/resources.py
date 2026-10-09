@@ -1,7 +1,8 @@
 """Lógica de negocio de recursos.
 
-Sin asignaciones ni historial en la Fase 2: se guarda el estado actual y
-`status_changed_at`. Los recursos no se borran; se desactivan con `is_active`.
+Se guarda el estado actual y `status_changed_at` (sin historial de estados).
+La base es una `Location` 1:1. Los recursos no se borran; se desactivan con
+`is_active`.
 """
 
 import uuid
@@ -12,14 +13,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.exceptions import ConflictError, InvalidInputError, NotFoundError
 from app.domain.resource_rules import INITIAL_STATUS, can_change_status
-from app.models import Organization, Resource, ResourceType
+from app.models import Organization, Resource, ResourceAssignment, ResourceType
+from app.repositories.assignments import AssignmentRepository
 from app.repositories.organizations import OrganizationRepository
 from app.repositories.resources import ResourceListQuery, ResourceRepository
 from app.schemas.resources import ResourceCreate, ResourceStatusChange, ResourceUpdate
+from app.services.locations import apply_location, new_location
 from app.services.transactions import commit_or_conflict
 
 # Campos de la ficha que no admiten `null` en una edición parcial.
-_NOT_NULLABLE = frozenset({"name", "type_id", "organization_id", "municipality", "is_active"})
+_NOT_NULLABLE = frozenset({"name", "type_id", "organization_id", "base", "is_active"})
 
 
 class ResourceService:
@@ -27,6 +30,7 @@ class ResourceService:
         self._session = session
         self._resources = ResourceRepository(session)
         self._organizations = OrganizationRepository(session)
+        self._assignments = AssignmentRepository(session)
 
     # --- Consultas --------------------------------------------------------------
 
@@ -35,6 +39,12 @@ class ResourceService:
 
     async def list_resources(self, query: ResourceListQuery) -> tuple[Sequence[Resource], int]:
         return await self._resources.list(query)
+
+    async def current_assignments(
+        self, resources: Sequence[Resource]
+    ) -> dict[uuid.UUID, tuple[ResourceAssignment, str]]:
+        """Asignación activa de cada recurso, con el código de su incidente."""
+        return await self._assignments.current_for_resources(r.id for r in resources)
 
     async def get_resource(self, resource_id: uuid.UUID) -> Resource:
         resource = await self._resources.get(resource_id)
@@ -57,7 +67,7 @@ class ResourceService:
             organization_id=organization.id,
             status=data.status or INITIAL_STATUS,
             status_changed_at=datetime.now(UTC),
-            municipality=data.municipality,
+            base=new_location(data.base),
             is_simulated=False,
         )
         self._resources.add(resource)
@@ -81,11 +91,18 @@ class ResourceService:
             await self._active_type(data.type_id)
         if data.organization_id is not None and data.organization_id != resource.organization_id:
             await self._active_organization(data.organization_id)
+        # Un recurso asignado no se desactiva: antes se retira desde el incidente.
+        if data.is_active is False and resource.is_active:
+            await self._ensure_not_assigned(resource)
 
-        for name in ("name", "type_id", "organization_id", "municipality", "is_active"):
+        for name in ("name", "type_id", "organization_id", "is_active"):
             value = getattr(data, name)
             if value is not None and getattr(resource, name) != value:
                 setattr(resource, name, value)
+        if data.base is not None and apply_location(resource.base, data.base):
+            # La base vive en otra tabla: sin tocar la fila del recurso, `version`
+            # no subiría y el bloqueo optimista no cubriría el cambio.
+            resource.updated_at = datetime.now(UTC)
 
         await commit_or_conflict(self._session)
         return await self.get_resource(resource.id)
@@ -96,6 +113,8 @@ class ResourceService:
             raise InvalidInputError("resource_inactive")
         if not can_change_status(resource.status, data.status):
             raise InvalidInputError("invalid_transition")
+        # Mientras está asignado, su estado lo gobierna la asignación.
+        await self._ensure_not_assigned(resource)
 
         resource.status = data.status
         resource.status_changed_at = datetime.now(UTC)
@@ -112,6 +131,10 @@ class ResourceService:
         if resource.version != version:
             raise ConflictError("version_conflict")
         return resource
+
+    async def _ensure_not_assigned(self, resource: Resource) -> None:
+        if await self._assignments.active_for_resource(resource.id) is not None:
+            raise InvalidInputError("resource_assigned")
 
     async def _active_type(self, type_id: uuid.UUID) -> ResourceType:
         resource_type = await self._resources.get_type(type_id)

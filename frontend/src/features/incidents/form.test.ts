@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import i18n from "@/i18n/config"
+import { parseCoordinate } from "@/lib/coordinates"
 
 import {
   buildDetails,
@@ -8,7 +9,6 @@ import {
   emptyFormValues,
   formValuesFromIncident,
   type IncidentFormValues,
-  parseCoordinate,
   toCreatePayload,
   toUpdatePayload,
 } from "./form"
@@ -33,6 +33,7 @@ const INCIDENT: IncidentDetail = {
   version: 4,
   reported_at: "2026-10-07T08:00:00Z",
   updated_at: "2026-10-07T09:00:00Z",
+  active_assignments: 0,
   description: null,
   details: { affected_hectares: "12.50", vegetation: "forest" },
   parent: null,

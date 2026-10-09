@@ -20,6 +20,8 @@ EXPECTED_TABLES = {
     "resources",
     # Fase 3
     "locations",
+    # Fase 4
+    "resource_assignments",
 }
 
 

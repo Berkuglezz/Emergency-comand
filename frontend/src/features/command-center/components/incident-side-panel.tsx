@@ -11,6 +11,8 @@ import {
   IncidentStatusPill,
   IncidentTypeLabel,
 } from "@/features/incidents/components/incident-badges"
+import { AssignmentSummary } from "@/features/assignments/components/assignments-panel"
+import { useAssignments } from "@/features/assignments/hooks"
 import { TimelineEntry } from "@/features/incidents/components/incident-timeline"
 import { CoordinatesText } from "@/features/incidents/components/location-text"
 import { useIncident, useIncidentEvents } from "@/features/incidents/hooks"
@@ -59,6 +61,8 @@ function SelectedIncident({
   const location = useLocation()
   const incident = useIncident(id)
   const events = useIncidentEvents(id)
+  const assignments = useAssignments(id)
+  const active = (assignments.data ?? []).filter((a) => a.released_at === null)
 
   let status: PanelStatus = "ready"
   if (incident.isPending) status = "loading"
@@ -117,6 +121,25 @@ function SelectedIncident({
               <DateTimeText value={data.updated_at} />
             </DetailItem>
           </dl>
+
+          <div className="flex flex-col gap-1.5">
+            <h4 className="text-xs font-medium text-muted-foreground">
+              {t("commandCenter.detail.assigned", { count: active.length })}
+            </h4>
+            {assignments.isError ? (
+              <p className="text-muted-foreground">{t("assignments.errors.unexpected")}</p>
+            ) : active.length === 0 ? (
+              <p className="text-muted-foreground">{t("assignments.empty")}</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {active.map((assignment) => (
+                  <li key={assignment.id}>
+                    <AssignmentSummary assignment={assignment} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <h4 className="text-xs font-medium text-muted-foreground">

@@ -5,9 +5,11 @@ import { initReactI18next } from "react-i18next"
 // `designSystem` solo se carga en desarrollo, igual que la ruta /dev/design-system.
 import {
   app,
+  assignments,
   auth,
   commandCenter,
   common,
+  coordinates,
   designSystem,
   errors,
   incidentCategories,
@@ -46,6 +48,8 @@ const translation = {
   topBar,
   commandCenter,
   map,
+  coordinates,
+  assignments,
   organizations,
   incidents,
   incidentStatus,

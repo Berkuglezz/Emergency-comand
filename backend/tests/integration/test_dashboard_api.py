@@ -36,7 +36,7 @@ async def _resource(
         "name": code,
         "type_id": type_id,
         "organization_id": organization_id,
-        "municipality": "Gijón",
+        "base": {"municipality": "Gijón"},
     }
     response = await client.post(f"{API}/resources", json=body, headers=headers)
     assert response.status_code == 201, response.text

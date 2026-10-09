@@ -30,7 +30,12 @@ export const DATA_SAMPLES = {
   code: "INC-0042",
   time: "14:07:31",
   coordinates: "43.3614, -5.8494",
+  resourceCode: "SIM-BOV-01",
 } as const
+
+/** ETA estimada de ejemplo (la API la devuelve así). */
+export const ETA_SAMPLE = { minutes: 12, distance_km: 8.4, origin: "base" } as const
+export const ETA_SAMPLE_ASSIGNED_AT = "2026-10-08T10:00:00Z"
 
 export const RADII = [
   { className: "rounded-sm", value: "4px" },

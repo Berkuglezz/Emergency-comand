@@ -13,11 +13,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { inDemoArea, type LngLat } from "@/features/map/config"
-import { PointMap } from "@/features/map/lazy"
+import { roundCoordinate } from "@/lib/coordinates"
 import { formatCoordinates } from "@/lib/format"
 
-import { roundCoordinate } from "../form"
+import { inDemoArea, type LngLat } from "./config"
+import { PointMap } from "./lazy"
 
 interface LocationPickerDialogProps {
   open: boolean
@@ -44,8 +44,8 @@ export function LocationPickerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{t("incidents.location.pickTitle")}</DialogTitle>
-          <DialogDescription>{t("incidents.location.pickDescription")}</DialogDescription>
+          <DialogTitle>{t("coordinates.pickTitle")}</DialogTitle>
+          <DialogDescription>{t("coordinates.pickDescription")}</DialogDescription>
         </DialogHeader>
         {/* Se monta al abrir: cada apertura parte de la posición del formulario. */}
         {open && (
@@ -86,7 +86,7 @@ function Picker({
       <Suspense fallback={<Skeleton className="h-80" />}>
         <PointMap
           point={point}
-          label={t("incidents.location.pickMapLabel")}
+          label={t("coordinates.pickMapLabel")}
           onPick={pick}
           className="h-80"
         />
@@ -95,13 +95,13 @@ function Picker({
         {point ? (
           <span className="font-data">{formatCoordinates(point[1], point[0])}</span>
         ) : (
-          <span className="text-muted-foreground">{t("incidents.location.pickNone")}</span>
+          <span className="text-muted-foreground">{t("coordinates.pickNone")}</span>
         )}
       </p>
       {outside && (
         <Alert variant="destructive">
           <TriangleAlert aria-hidden />
-          <AlertDescription>{t("incidents.validation.outOfArea")}</AlertDescription>
+          <AlertDescription>{t("coordinates.validation.outOfArea")}</AlertDescription>
         </Alert>
       )}
       <DialogFooter>
@@ -115,7 +115,7 @@ function Picker({
             if (point) onConfirm(point[1], point[0])
           }}
         >
-          {t("incidents.location.pickConfirm")}
+          {t("coordinates.pickConfirm")}
         </Button>
       </DialogFooter>
     </>

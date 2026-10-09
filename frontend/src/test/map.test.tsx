@@ -31,11 +31,8 @@ function seed(): void {
   backend.incidents.add({ title: "Cerrado", priority: "low", status: "closed", coordinates: GIJON })
 }
 
-// El mapa es un chunk diferido: la primera carga en frío puede pasar de 1 s.
-const LAZY_TIMEOUT = { timeout: 5000 }
-
 async function mapRegion(): Promise<HTMLElement> {
-  return screen.findByRole("region", { name: "Mapa de incidentes activos" }, LAZY_TIMEOUT)
+  return screen.findByRole("region", { name: "Mapa de incidentes activos" })
 }
 
 function lastMap(): FakeMap {
@@ -235,11 +232,7 @@ describe("coordenadas en el listado, la ficha y el formulario", () => {
     const { router } = renderApp(`/incidents/${incendio.id}`)
 
     expect(
-      await screen.findByRole(
-        "region",
-        { name: "Mapa de la ubicación de INC-000001" },
-        LAZY_TIMEOUT
-      )
+      await screen.findByRole("region", { name: "Mapa de la ubicación de INC-000001" })
     ).toBeInTheDocument()
     expect(screen.getByText("43.361, -5.844")).toBeInTheDocument()
 
@@ -257,11 +250,7 @@ describe("coordenadas en el listado, la ficha y el formulario", () => {
     await user.click(screen.getByRole("button", { name: "Elegir en el mapa" }))
 
     const dialog = await screen.findByRole("dialog")
-    await within(dialog).findByRole(
-      "region",
-      { name: "Mapa para elegir la posición" },
-      LAZY_TIMEOUT
-    )
+    await within(dialog).findByRole("region", { name: "Mapa para elegir la posición" })
     act(() => {
       lastMap().fire("click", { lngLat: { lng: -5.6100004, lat: 43.3600004 } })
     })
@@ -285,11 +274,7 @@ describe("coordenadas en el listado, la ficha y el formulario", () => {
 
     await user.click(await screen.findByRole("button", { name: "Elegir en el mapa" }))
     const dialog = await screen.findByRole("dialog")
-    await within(dialog).findByRole(
-      "region",
-      { name: "Mapa para elegir la posición" },
-      LAZY_TIMEOUT
-    )
+    await within(dialog).findByRole("region", { name: "Mapa para elegir la posición" })
     act(() => {
       lastMap().fire("click", { lngLat: { lng: -3.7038, lat: 40.4168 } })
     })

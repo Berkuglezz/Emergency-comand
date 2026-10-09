@@ -25,6 +25,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 BEFORE = "48bc2488f9e1"  # incidentes y recursos (Fase 2)
 LOCATIONS = "16ed0556ad5c"  # ubicaciones (Fase 3.1)
 LOCATION_CHANGED = "22b43ff4025b"  # evento location_changed (Fase 3.2)
+RESOURCE_BASES = "3ba873c38add"  # bases de recursos y velocidades (Fase 4.1)
+ASSIGNMENTS = "e5df184e14c9"  # asignaciones (Fase 4.3)
 
 
 def _alembic() -> Config:
@@ -184,3 +186,66 @@ def test_location_changed_downgrade_is_refused_when_events_exist(migration_db: S
     # El historial es de solo inserción: no se puede volver a un CHECK sin ese tipo.
     with pytest.raises(RuntimeError, match="location_changed"):
         command.downgrade(_alembic(), LOCATIONS)
+
+
+def test_resource_bases_migration_moves_data_and_downgrades(migration_db: Settings) -> None:
+    settings = migration_db
+    command.upgrade(_alembic(), LOCATION_CHANGED)
+    asyncio.run(
+        _run(
+            settings,
+            "WITH org AS (INSERT INTO organizations (code, name) VALUES ('o', 'O') RETURNING id)"
+            " INSERT INTO resources (code, name, type_id, organization_id, status, municipality)"
+            " SELECT 'R-01', 'Recurso', t.id, org.id, 'available', 'Gijón'"
+            " FROM resource_types t, org WHERE t.code = 'fire_engine'",
+        )
+    )
+    before = asyncio.run(_run(settings, "SELECT version, updated_at FROM resources"))[0]
+
+    command.upgrade(_alembic(), RESOURCE_BASES)
+
+    assert "municipality" not in _columns(settings, "resources")
+    row = asyncio.run(
+        _run(
+            settings,
+            "SELECT r.version, r.updated_at, l.municipality, l.geom FROM resources r"
+            " JOIN locations l ON l.id = r.base_location_id",
+        )
+    )[0]
+    assert (row["municipality"], row["geom"]) == ("Gijón", None)
+    assert (row["version"], row["updated_at"]) == (before["version"], before["updated_at"])
+    speeds = asyncio.run(_run(settings, "SELECT code, average_speed_kmh FROM resource_types"))
+    assert {s["code"]: s["average_speed_kmh"] for s in speeds}["ambulance_advanced"] == 65
+
+    command.downgrade(_alembic(), LOCATION_CHANGED)
+
+    restored = asyncio.run(_run(settings, "SELECT municipality FROM resources"))
+    assert restored == [{"municipality": "Gijón"}]
+    # La base huérfana se borra con el downgrade.
+    assert asyncio.run(_run(settings, "SELECT count(*) AS n FROM locations")) == [{"n": 0}]
+    command.upgrade(_alembic(), "head")
+
+
+def test_assignments_downgrade_is_refused_when_assignments_exist(migration_db: Settings) -> None:
+    settings = migration_db
+    command.upgrade(_alembic(), ASSIGNMENTS)
+    asyncio.run(
+        _run(
+            settings,
+            "WITH org AS (INSERT INTO organizations (code, name) VALUES ('o', 'O') RETURNING id),"
+            " base AS (INSERT INTO locations (municipality) VALUES ('Gijón') RETURNING id),"
+            " res AS (INSERT INTO resources (code, name, type_id, organization_id, status,"
+            " base_location_id) SELECT 'R-01', 'R', t.id, org.id, 'in_service', base.id"
+            " FROM resource_types t, org, base WHERE t.code = 'fire_engine' RETURNING id),"
+            " loc AS (INSERT INTO locations (municipality) VALUES ('Oviedo') RETURNING id),"
+            " inc AS (INSERT INTO incidents (code, type_id, title, status, priority, location_id)"
+            " SELECT 'INC-000001', t.id, 'x', 'resources_assigned', 'medium', loc.id"
+            " FROM incident_types t, loc WHERE t.code = 'flood' RETURNING id)"
+            " INSERT INTO resource_assignments (incident_id, resource_id, assigned_at)"
+            " SELECT inc.id, res.id, now() FROM inc, res",
+        )
+    )
+
+    # Las asignaciones forman parte del historial: no se pueden deshacer.
+    with pytest.raises(RuntimeError, match="asignaciones"):
+        command.downgrade(_alembic(), RESOURCE_BASES)

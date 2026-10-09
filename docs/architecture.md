@@ -1,6 +1,6 @@
 # Arquitectura de Emergency Command
 
-Estado: **Fase 3** (incidentes, recursos y centro de mando con datos reales, ubicaciones con PostGIS y mapa funcional). Este documento describe lo que **está implementado**. Lo que pertenece a fases posteriores se indica expresamente como tal, y la [sección 15](#15-implementado-y-pendiente) separa con claridad lo que funciona de lo que solo está preparado.
+Estado: **Fase 4** (incidentes, recursos y centro de mando con datos reales, ubicaciones con PostGIS, mapa funcional, y asignación de recursos con ETA estimada). Este documento describe lo que **está implementado**. Lo que pertenece a fases posteriores se indica expresamente como tal, y la [sección 15](#15-implementado-y-pendiente) separa con claridad lo que funciona de lo que solo está preparado.
 
 Las reglas persistentes del proyecto (alcance, decisiones confirmadas, sistema de diseño) están en [`CLAUDE.md`](../CLAUDE.md). Este documento no las sustituye: explica cómo están implementadas.
 
@@ -62,7 +62,8 @@ app/
 ├─ models/            modelos SQLAlchemy, un fichero por entidad
 ├─ schemas/           modelos pydantic de entrada/salida
 ├─ domain/            reglas puras, sin I/O:
-│                     enums, exceptions, incident_rules, incident_details, resource_rules, geo
+│                     enums, exceptions, incident_rules, incident_details, resource_rules, geo,
+│                     eta, assignment_rules
 ├─ core/              config, security, permissions, logging
 ├─ db/                Base declarativa, motor y sesiones async
 ├─ realtime/          vacío: Fase 5
@@ -82,9 +83,10 @@ Reglas que cumple el código:
   | `AuthenticationError` | 401 (con `WWW-Authenticate: Bearer`) | `invalid_credentials`, `invalid_token`, `refresh_token_reused` |
   | `PermissionDeniedError` | 403 | `permission_denied` |
   | `NotFoundError` | 404 | `incident_not_found`, `resource_not_found` |
-  | `ConflictError` | 409 | `version_conflict`, `resource_code_taken` |
-  | `InvalidInputError` | 422 | `invalid_transition`, `invalid_details`, `incident_closed`, `resource_inactive`, `coordinates_incomplete`, `location_out_of_area`, `invalid_bbox` |
+  | `ConflictError` | 409 | `version_conflict`, `resource_code_taken`, `resource_already_assigned` |
+  | `InvalidInputError` | 422 | `invalid_transition`, `invalid_details`, `incident_closed`, `resource_inactive`, `coordinates_incomplete`, `location_out_of_area`, `invalid_bbox`, `resource_not_available`, `resource_assigned`, `assignment_already_released`, `invalid_release_reason` |
   | otro `DomainError` | 400 | |
+  | interbloqueo o fallo de serialización de PostgreSQL (`40P01`, `40001`) | 409 `concurrent_update`: no se ha guardado nada | |
   | error no controlado | 500 `internal_error`, sin detalles | |
 
   Los errores de validación de pydantic (formato de la petición) son 422 con el formato de FastAPI (`detail` es una lista con `type`, `loc` y `msg`), pero **sin `input` ni `ctx`**: no se devuelven los valores recibidos (pueden ser datos sensibles, como coordenadas) y un `NaN` en el cuerpo no rompe la respuesta. El frontend los trata como `validation_error`.
@@ -113,11 +115,16 @@ Todos bajo `/api/v1`. «Autenticado» exige un access token válido; los permiso
 | `GET /incidents/{id}/events` | `incidents:read` | Historial del incidente en orden cronológico |
 | `POST /incidents/{id}/notes` | `incidents:update` | Nota en el historial (también en incidentes cerrados o cancelados) |
 | `GET /resource-types` | `resources:read` | Catálogo de tipos de recurso |
-| `GET /resources` | `resources:read` | Listado paginado. Filtros: `status`, `type`, `organization_id`, `municipality`, `active`, `q`. Orden: `code`, `status`, `-status_changed_at` |
+| `GET /resources` | `resources:read` | Listado paginado con la asignación actual de cada recurso. Filtros: `status`, `type`, `organization_id`, `municipality` (de la base), `active`, `q`. Orden: `code`, `status`, `-status_changed_at` |
 | `POST /resources` | `resources:manage` | Alta de un recurso |
 | `GET /resources/{id}` | `resources:read` | Ficha del recurso |
 | `PATCH /resources/{id}` | `resources:manage` | Edición de la ficha, incluida la (des)activación, con `version` |
 | `POST /resources/{id}/status` | `resources:update_status` | Cambio de estado operativo con `version` |
+| `GET /incidents/{id}/assignments` | `incidents:read` | Asignaciones del incidente: activas primero y después el historial ([sección 5.1](#51-asignación-de-recursos-y-eta)) |
+| `GET /incidents/{id}/assignment-candidates` | `incidents:read` + `resources:read` | Recursos asignables ordenados por ETA estimada, con los tipos sugeridos marcados. Filtros: `type`, `organization_id`, `include_assigned`. **Sin preselección** |
+| `POST /incidents/{id}/assignments` | `assignments:manage` | `{resource_id, version, reassign?}` → detalle del incidente |
+| `POST /assignments/{id}/arrival` | `assignments:update` | Marca «en el lugar» (`{version}` del incidente) |
+| `POST /assignments/{id}/release` | `assignments:manage` | Retira con motivo (`{version, reason}`) |
 | `GET /dashboard/summary` | `incidents:read` + `resources:read` | KPIs del centro de mando ([sección 7](#7-resumen-del-centro-de-mando)) |
 
 **Protegido por defecto:** `app/api/v1/router.py` registra los endpoints públicos uno a uno y cuelga el resto de un router que exige un access token válido. Un test recorre el esquema OpenAPI y comprueba que cualquier ruta no pública responde 401 sin token.
@@ -133,7 +140,7 @@ Todos bajo `/api/v1`. «Autenticado» exige un access token válido; los permiso
 
 ## 3. Modelo de datos
 
-Cuatro migraciones en `backend/alembic/versions/`:
+Seis migraciones en `backend/alembic/versions/`:
 
 | Migración | Contenido |
 |---|---|
@@ -141,6 +148,8 @@ Cuatro migraciones en `backend/alembic/versions/`:
 | `20261007_48bc2488f9e1` (Fase 2) | Catálogos `incident_types` y `resource_types` con sus datos de referencia; `incidents` con la secuencia `incident_code_seq`; `incident_events` con su trigger de solo inserción; `resources` |
 | `20261008_16ed0556ad5c` (Fase 3) | `locations` con `geom geometry(Point, 4326)` e índice GiST; traslado del municipio y la descripción de cada incidente a su ubicación (sin tocar `version`, `updated_at` ni el historial); `incidents.location_id NOT NULL UNIQUE`. El `downgrade` restaura el texto y pierde las coordenadas |
 | `20261008_22b43ff4025b` (Fase 3) | Amplía el CHECK de `incident_events.event_type` con `location_changed`. El `downgrade` se niega si ya hay eventos de ese tipo (el historial no se puede reescribir) |
+| `20261009_3ba873c38add` (Fase 4) | `resource_types.average_speed_kmh` (velocidades de la ETA, cargadas en la migración); base de cada recurso en `locations` (`resources.base_location_id NOT NULL UNIQUE`), con traslado del municipio. El `downgrade` pierde las coordenadas de las bases |
+| `20261009_e5df184e14c9` (Fase 4) | `resource_assignments` con el índice único parcial `uq_resource_assignments_active_resource` (una asignación activa por recurso); CHECK de `event_type` con `resource_assigned`, `resource_arrived` y `resource_released`. El `downgrade` se niega si ya hay asignaciones o eventos de asignación |
 
 ### 3.1 Tablas de la Fase 1
 
@@ -227,9 +236,31 @@ created_at / updated_at timestamptz
 
 - **1:1 con el incidente** (`incidents.location_id NOT NULL UNIQUE`, `ON DELETE RESTRICT`). No se comparten ubicaciones: corregir el punto de un incidente nunca mueve otro.
 - **Latitud y longitud** no tienen columnas propias: se leen de `geom` con `ST_Y`/`ST_X` (`column_property`). El tipo `geometry(Point, 4326)` rechaza otras geometrías y otros SRID; un punto sin SRID recibe el de la columna.
-- Los **recursos** siguen con `municipality` textual: sus posiciones no forman parte de la Fase 3.
+- Desde la Fase 4, `locations` también guarda la **base de cada recurso** (`resources.base_location_id NOT NULL UNIQUE`). Una fila nunca se comparte: pertenece a un incidente o a un recurso.
 
-### 3.4 Detalles comunes
+### 3.4 Tablas de la Fase 4
+
+```
+resource_assignments  (nunca se borra; activa = released_at IS NULL)
+──────────────────────────────────────────────────────────────────
+id               uuid PK
+incident_id      uuid FK → incidents (RESTRICT)
+resource_id      uuid FK → resources (RESTRICT)
+assigned_at      timestamptz         assigned_by_id  uuid FK → users NULL
+arrived_at       timestamptz NULL    «en el lugar»
+released_at      timestamptz NULL    released_by_id  uuid FK → users NULL
+release_reason   varchar + CHECK NULL  completed | not_needed | unavailable |
+                                       reassigned | incident_closed
+eta_minutes      int NULL            estimación guardada al asignar
+eta_distance_km  numeric(6,1) NULL
+eta_origin       varchar + CHECK NULL  base (Fase 5: last_position)
+is_simulated     bool
+UNIQUE parcial (resource_id) WHERE released_at IS NULL
+```
+
+`resource_types` gana `average_speed_kmh` (`CHECK > 0`) y `resources` sustituye `municipality` por `base_location_id`.
+
+### 3.5 Detalles comunes
 
 - **Fechas:** todas son `timestamptz` en UTC. `db/base.py` lo impone para cualquier `datetime` y un test lo comprueba. El frontend las muestra en Europe/Madrid.
 - **Claves primarias:** UUID, generado en Python (`uuid4`) con valor por defecto en el servidor (`gen_random_uuid()`) para las inserciones en SQL.
@@ -257,9 +288,14 @@ received ─► assessing ─► in_progress ─► controlled ─► closed
                               ▲              │
                               └──────────────┘   (reapertura)
 
-cancelled: desde received, assessing o in_progress
-resources_assigned: existe en el enum, pero no es alcanzable hasta que haya asignaciones
+received / assessing ──(primer recurso asignado, automático)──► resources_assigned
+resources_assigned   ──(se retira el último, automático)──────► assessing
+resources_assigned   ──(manual)──► in_progress
+
+cancelled: desde received, assessing, resources_assigned o in_progress
 ```
+
+- `resources_assigned` **nunca es una acción manual**: solo se alcanza asignando recursos. Los cambios automáticos se registran como `status_changed` con `cause: "assignment"`.
 
 - La tabla de transiciones está en `domain/incident_rules.py` y es la **única fuente de verdad**. El detalle del incidente incluye `allowed_transitions`, calculado con esa misma tabla, para que el frontend ofrezca acciones sin duplicar el flujo.
 - **Cerrar o cancelar** exige además el permiso `incidents:close`, y fija `closed_at`.
@@ -288,6 +324,9 @@ Un solo nivel: un incidente con padre no puede tener hijos, y un incidente con h
 | `note_added` | `text` |
 | `parent_changed` | `from`, `to` (códigos de incidente o nulo) |
 | `location_changed` | `fields` (`municipality`, `description`, `coordinates`), `from` y `to` (municipio, descripción, latitud y longitud) |
+| `resource_assigned` | `resource` (código), `resource_id`, `resource_type`, `eta` (`{minutes, distance_km, origin}` o nulo), `eta_unavailable`, `reassigned_from` |
+| `resource_arrived` | `resource`, `resource_id` |
+| `resource_released` | `resource`, `resource_id`, `reason`, `reassigned_to` |
 
 - Cada cambio inserta su evento **en la misma transacción** que el propio cambio: el historial no puede desincronizarse del incidente.
 - **Solo inserción**, también en la base de datos: un trigger impide `UPDATE`, `DELETE` y `TRUNCATE`.
@@ -320,13 +359,28 @@ Un solo nivel: un incidente con padre no puede tener hijos, y un incidente con h
 
 ## 5. Recursos
 
-- **Ficha:** código, nombre, tipo, organización, municipio base, estado, `status_changed_at`, `is_active`, `is_simulated` y `version`. **Sin coordenadas** (las posiciones de recursos quedan fuera de la Fase 3) y **sin historial** propio: solo se guarda el último cambio de estado.
+- **Ficha:** código, nombre, tipo, organización, **base** (`Location`: municipio, descripción y coordenadas opcionales), estado, `status_changed_at`, asignación actual, `is_active`, `is_simulated` y `version`. Sin historial de estados: solo se guarda el último cambio (las asignaciones guardan el suyo). La posición actual/GPS es de la Fase 5.
 - **Código inmutable:** se normaliza a mayúsculas y es único (`409 resource_code_taken`).
 - **Estados operativos:** `available`, `in_service`, `out_of_service`. Se puede pasar de cualquiera a cualquier otro; repetir el actual es `422 invalid_transition` (`domain/resource_rules.py`).
 - **Desactivación:** `is_active = false` por `PATCH`. Un recurso desactivado no cambia de estado (`422 resource_inactive`) hasta que se reactive, pero su ficha sí se puede editar.
 - **Tipo y organización nuevos** deben estar activos; un recurso puede seguir asociado a uno que se desactivó después.
 - **Bloqueo optimista** con `version`, igual que en incidentes.
-- **Sin asignaciones:** el estado `in_service` se cambia a mano. La relación recurso ↔ incidente (`ResourceAssignment`) es de una fase posterior.
+- **Recurso asignado:** su estado lo gobierna la asignación. No se puede cambiar a mano ni desactivar (`422 resource_assigned`): se retira desde el incidente.
+
+### 5.1 Asignación de recursos y ETA
+
+**Principio: el sistema informa → la persona responsable decide → el sistema ejecuta.** Los candidatos se ordenan por ETA estimada y se marcan los tipos sugeridos por el catálogo, pero **nunca se preselecciona ni se asigna nada automáticamente** (eso no es IA; la IA es de la Fase 8).
+
+- **ETA estimada** (`domain/eta.py`), local y determinista, sin APIs externas ni rutas: `minutos = ceil(haversine × 1,4 / velocidad media del tipo × 60)`. `distance_km` es la distancia estimada por carretera (línea recta × 1,4), con 1 decimal; `origin` es `base`. Sin tiempo de activación. Velocidades (km/h): autobomba 50, rescate 55, ambulancia básica 60, avanzada 65, mando 60, protección civil 50, logística 45.
+- **Se guarda al asignar** (`eta_*`): cambiar después la base o la velocidad no altera lo registrado. La interfaz siempre la muestra como «estimado».
+- **Una asignación activa por recurso** (índice único parcial; con dos asignaciones simultáneas, una gana y la otra recibe `409 resource_already_assigned`). Un incidente admite varios recursos.
+- **Asignar:** incidente activo con su `version`, recurso activo y `available`. En una transacción: recurso → `in_service`, asignación con ETA, `resource_assigned` y, si el incidente estaba en `received`/`assessing`, `resources_assigned`. Orden global de bloqueos, igual en todas las operaciones (también al cerrar un incidente): **incidentes (por id) → recursos (por id) → asignaciones**. Reasignar mira primero, sin bloquear, a qué incidente está asignado el recurso, bloquea los dos incidentes en orden y lo vuelve a comprobar todo con los bloqueos tomados.
+- **«En el lugar»:** rellena `arrived_at` una vez; **no cambia el estado del incidente**.
+- **Retirar:** motivo obligatorio (`completed`, `not_needed`, `unavailable`; los otros dos los pone el sistema). El recurso vuelve a `available` (o `out_of_service` con `unavailable`). Si era el último y el incidente seguía en `resources_assigned`, vuelve a `assessing`.
+- **Reasignar** (`reassign: true`, confirmado en la interfaz): retira del incidente de origen (`reassigned`) y asigna al de destino en la misma transacción, con eventos y reglas en ambos.
+- **Cerrar o cancelar** un incidente retira automáticamente sus asignaciones activas (`incident_closed`); la confirmación enumera los recursos.
+- **Toda escritura** sube una vez la `version` del incidente (y la del recurso cuando cambia su estado) y devuelve el detalle del incidente.
+- **Preparado para la Fase 5:** todo cambio de asignación genera su `IncidentEvent` desde un servicio (el EventBus solo tendrá que publicarlos tras el commit), y `origin` permite estimar desde una posición actual (`resource_positions`, solo diseñada). Hueco conocido: los cambios manuales de estado de un recurso no generan evento.
 
 ---
 
@@ -428,6 +482,8 @@ refresh(A) de nuevo:
   | `resources:update_status` | ✅ | ✅ | ✅ |
   | `resources:manage` (alta, edición, desactivación) | ✅ | ❌ | ❌ |
   | `organizations:read` | ✅ | ✅ | ❌ |
+  | `assignments:manage` (asignar, retirar, reasignar) | ✅ | ✅ | ❌ |
+  | `assignments:update` (marcar «en el lugar») | ✅ | ✅ | ✅ |
 
 - **Comprobación:** con la dependencia `require_permission(Permission.X)` en el router. Cerrar o cancelar se comprueba en el servicio, porque depende del estado de destino. Sin permiso responde `403 {"detail":"permission_denied"}`.
 - **En el frontend es solo experiencia de usuario.** `/auth/me` devuelve la lista de permisos del usuario, y con ella el frontend filtra la navegación, oculta las acciones no permitidas, evita peticiones que sabe que darían 403 (por ejemplo, la lista de organizaciones para el operador) y muestra «Acceso no permitido» en las rutas sin permiso. El backend vuelve a comprobarlo en cada petición.
@@ -460,6 +516,7 @@ src/
 ├─ components/ui/        componentes de shadcn/ui (código de terceros, cambios mínimos)
 ├─ components/ops/       sistema de diseño propio (ver 10.6)
 ├─ features/
+│  ├─ assignments/       asignación de recursos: api, hooks, panel y diálogo de asignación
 │  ├─ auth/              sesión, login, permisos
 │  ├─ command-center/    resumen del dashboard, filtros compartidos y paneles (mapa incluido)
 │  ├─ incidents/         api, hooks, types, filters, form, presentation, components
@@ -485,10 +542,10 @@ Cada módulo de `features/` sigue el mismo reparto: `types.ts` (alias de los tip
 | `/` | sesión | **Centro de mando:** KPIs, **mapa** de incidentes activos (~55 % de la columna principal), incidentes activos con filtros, panel lateral del incidente seleccionado (resumen, coordenadas y últimos 5 eventos) y resumen de recursos por estado |
 | `/incidents` | `incidents:read` | Listado con filtros (incluido «Coordenadas»), orden y paginación |
 | `/incidents/new` | `incidents:create` | Alta con validación, coordenadas opcionales («Elegir en el mapa») y sección fija de `details` según el tipo |
-| `/incidents/:id` | `incidents:read` | Detalle con minimapa, acciones de estado, edición, padre/hijos, historial y notas |
+| `/incidents/:id` | `incidents:read` | Detalle con minimapa, acciones de estado, edición, **recursos asignados** (asignar, en el lugar, retirar, reasignar), padre/hijos, historial y notas |
 | `/resources` | `resources:read` | Listado con filtros, orden y paginación |
 | `/resources/new` | `resources:manage` | Alta de recurso |
-| `/resources/:id` | `resources:read` | Ficha, cambio de estado, edición y desactivación |
+| `/resources/:id` | `resources:read` | Ficha con base y asignación actual, cambio de estado (bloqueado si está asignado), edición y desactivación |
 | `/organizations` | `organizations:read` | Listado de organizaciones |
 | `/dev/design-system` | solo desarrollo | Catálogo del sistema de diseño; no existe en producción |
 
@@ -550,7 +607,7 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 | Estado de recurso | `available` → ok · `in_service` → info · `out_of_service` → warning · recurso desactivado → inactive |
 | Dato simulado | info, con icono de matraz y el texto «Simulado» |
 
-**Componentes de `components/ops/`:** `Panel` (estados de carga, vacío y error), `PriorityBadge`, `StatusPill`, `SimulatedPill`, `KpiTile`, `ConfirmDialog` (admite contenido adicional, como un motivo), `MutationErrorAlert` (errores de escritura y 409), `FilterSelect`, `Pagination`, `BackLink`, `DetailItem`/`DateTimeText`, `FormField` e `IncidentMarker` (marcador del mapa).
+**Componentes de `components/ops/`:** `Panel` (estados de carga, vacío y error), `PriorityBadge`, `StatusPill`, `SimulatedPill`, `KpiTile`, `ConfirmDialog` (admite contenido adicional, como un motivo), `MutationErrorAlert` (errores de escritura y 409), `FilterSelect`, `Pagination`, `BackLink`, `DetailItem`/`DateTimeText`, `FormField`, `IncidentMarker` (marcador del mapa), `ResourceMarker` (bases de los recursos asignados) y `EtaText` (ETA siempre «estimado»).
 
 **Catálogo:** `/dev/design-system` muestra los tokens y los componentes base en sus estados. Vite elimina esa ruta, su código y sus textos del build de producción.
 
@@ -565,6 +622,7 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 - **Atribución obligatoria** (OpenFreeMap, OpenMapTiles y OpenStreetMap) siempre visible, aunque falle el estilo. Los textos de los controles de MapLibre están traducidos.
 - **Formulario:** latitud y longitud como texto (coma o punto decimal), validadas como en el backend. «Elegir en el mapa» abre un diálogo donde un clic coloca el punto (se puede arrastrar); los campos siguen siendo la fuente de verdad. La ficha muestra un minimapa de solo lectura o «Sin coordenadas».
 - **Privacidad:** al proveedor del mapa base solo se le piden estilo, teselas, fuentes y sprites; los marcadores se dibujan en el navegador.
+- **Bases de los recursos asignados (Fase 4):** con un incidente seleccionado, el mapa dibuja solo las bases de sus recursos asignados (`ResourceMarker`, forma distinta a la del incidente; varios recursos con la misma base, un solo marcador «+N»). Sin líneas base → incidente (no hay rutas) y sin capa global de bases. «Ajustar a incidentes» incluye las bases visibles.
 
 ### 10.8 i18n
 
@@ -595,8 +653,8 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 
 | | Herramientas | Qué cubren |
 |---|---|---|
-| Backend (352 tests) | pytest, ruff, mypy (estricto) | **Fase 1:** configuración, redacción de logs, errores, seguridad (Argon2, JWT), permisos, metadatos de modelos (sin columnas geográficas, fechas con zona), health, login, `/me`, refresh y reutilización, logout, 403 por rol y protección por defecto. **Fase 2:** reglas puras (transiciones, `allowed_transitions`, `details`, recursos), modelos y trigger de solo inserción, eventos en la misma transacción, API de incidentes y recursos (permisos, filtros, orden, paginación, 409, ediciones sin cambios, notas en cerrados, padre/hijo), KPIs del dashboard y seed (marcado, coherencia del historial, idempotencia, no deshace cambios, no consume códigos). **Fase 3:** reglas geográficas puras (rangos, pares, área de la demo, `bbox`), migración con datos (traslado, downgrade y negativa a deshacer `location_changed`) sobre una base de datos propia, PostGIS (tipo, SRID, índice GiST, 1:1), coordenadas en la API (redondeo, `NaN`, códigos de error), `location_changed` y `version`, filtro `has_coordinates`, `GET /incidents/map` (filtros, `bbox`, orden GeoJSON, truncado, 401/403), 422 sin `input`, **coordenadas fuera de los logs** y seed con coordenadas |
-| Frontend (95 tests) | Vitest, Testing Library, ESLint, `tsc` | Cliente API, carga de i18n, lógica pura de filtros y formularios, y flujos completos contra un backend falso en memoria que imita el contrato real: login, rutas y navegación por rol, listados con filtros en la URL, detalle e historial, cambios de estado con confirmación, 409 con recarga, edición, notas, altas con validación, desactivación, centro de mando (KPIs, selección, resumen de recursos) y «Volver» con filtros. **Fase 3**, con un doble de `maplibre-gl` (jsdom no tiene WebGL): marcadores, selección mapa ↔ lista ↔ panel, centrado con y sin movimiento reducido, filtros compartidos, encuadre, incidentes sin coordenadas, fallo del mapa base y sin WebGL2, filtro del listado, minimapa, «Elegir en el mapa», validación de coordenadas e historial de `location_changed` |
+| Backend (425 tests) | pytest, ruff, mypy (estricto) | **Fase 1:** configuración, redacción de logs, errores, seguridad (Argon2, JWT), permisos, metadatos de modelos (sin columnas geográficas, fechas con zona), health, login, `/me`, refresh y reutilización, logout, 403 por rol y protección por defecto. **Fase 2:** reglas puras (transiciones, `allowed_transitions`, `details`, recursos), modelos y trigger de solo inserción, eventos en la misma transacción, API de incidentes y recursos (permisos, filtros, orden, paginación, 409, ediciones sin cambios, notas en cerrados, padre/hijo), KPIs del dashboard y seed (marcado, coherencia del historial, idempotencia, no deshace cambios, no consume códigos). **Fase 3:** reglas geográficas puras (rangos, pares, área de la demo, `bbox`), migración con datos (traslado, downgrade y negativa a deshacer `location_changed`) sobre una base de datos propia, PostGIS (tipo, SRID, índice GiST, 1:1), coordenadas en la API (redondeo, `NaN`, códigos de error), `location_changed` y `version`, filtro `has_coordinates`, `GET /incidents/map` (filtros, `bbox`, orden GeoJSON, truncado, 401/403), 422 sin `input`, **coordenadas fuera de los logs** y seed con coordenadas. **Fase 4:** ETA (Haversine, sinuosidad, redondeo, sin coordenadas), reglas de asignación y transiciones automáticas, migraciones con datos y negativa a deshacer asignaciones, API de asignaciones (efectos, errores, varios recursos, llegada, retirada con cada motivo, reasignación atómica, cierre con retirada, bloqueos, permisos, candidatos por ETA sin preselección, ETA guardada que no cambia), **concurrencia real** (dos asignaciones simultáneas: una gana; cierre y reasignación simultáneos terminan de forma coherente y sin interbloqueos; un interbloqueo real de PostgreSQL se traduce a `409 concurrent_update`), índice único parcial, coordenadas de bases fuera de los logs y seed coherente |
+| Frontend (105 tests) | Vitest, Testing Library, ESLint, `tsc` | Cliente API, carga de i18n, lógica pura de filtros y formularios, y flujos completos contra un backend falso en memoria que imita el contrato real: login, rutas y navegación por rol, listados con filtros en la URL, detalle e historial, cambios de estado con confirmación, 409 con recarga, edición, notas, altas con validación, desactivación, centro de mando (KPIs, selección, resumen de recursos) y «Volver» con filtros. **Fase 3**, con un doble de `maplibre-gl` (jsdom no tiene WebGL): marcadores, selección mapa ↔ lista ↔ panel, centrado con y sin movimiento reducido, filtros compartidos, encuadre, incidentes sin coordenadas, fallo del mapa base y sin WebGL2, filtro del listado, minimapa, «Elegir en el mapa», validación de coordenadas e historial de `location_changed`. **Fase 4:** candidatos por ETA sin preselección, asignación, retirada con motivo obligatorio, llegada del operador, reasignación confirmada, cierre que enumera los recursos, ficha de recurso asignado bloqueada, panel lateral, indicador y bases (agrupadas) en el mapa, y aviso de `concurrent_update` |
 
 - Los tests del backend usan una base de datos propia (`<POSTGRES_DB>_test`), recreada y migrada desde cero en cada ejecución; cada test corre en una transacción que se deshace. Los del frontend no necesitan backend.
 - **Verificación de extremo a extremo** (manual, no versionada): Edge en modo headless controlado por CDP contra el stack de Docker con el seed. Se hace **en solo lectura** sobre la base de desarrollo, porque el historial es de solo inserción y cada escritura consumiría códigos `INC-`; las escrituras están cubiertas por los tests.
@@ -637,6 +695,15 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 | Marcadores compactos (código al seleccionar y en el tooltip) | A escala regional, los marcadores con código se solapaban |
 | Atribución propia, siempre visible | El estilo de OpenFreeMap no declara atribuciones, y deben verse aunque falle |
 | 422 de validación sin `input` ni `ctx` | No devolver valores recibidos y no romper la respuesta con `NaN` |
+| El sistema ordena candidatos, la persona decide | Ayuda a la decisión sin despacho automático; la IA es de la Fase 8 |
+| ETA local (Haversine × 1,4 / velocidad del tipo) y guardada al asignar | Sin APIs externas; el historial no cambia retroactivamente |
+| Base del recurso como `Location` 1:1 | Segundo consumidor real con las mismas necesidades (coordenadas, validación, área, selector) |
+| Índice único parcial para la asignación activa | La base de datos garantiza la regla incluso con peticiones simultáneas |
+| `resources_assigned` solo automático | El estado refleja hechos (hay recursos asignados), no una decisión aparte |
+| Retirada automática al cerrar o cancelar | Ningún recurso queda bloqueado en un incidente finalizado |
+| Varios eventos de una operación separados 1 µs | El timeline los lee en el orden en que ocurrieron |
+| Orden global de bloqueos (incidentes → recursos → asignaciones) | Evita interbloqueos entre cerrar un incidente y reasignar uno de sus recursos a la vez |
+| Interbloqueo o fallo de serialización de PostgreSQL → `409 concurrent_update` | Si aun así la base de datos aborta una transacción, no se ha guardado nada: el cliente recarga y decide; sin reintentos automáticos ni 500 genérico |
 
 ---
 
@@ -644,7 +711,7 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 
 - **Límite de intentos de login:** pendiente para una fase de seguridad (`CLAUDE.md` §2.5).
 - **Imágenes Docker de producción:** las actuales son de desarrollo y se ejecutan como root (`CLAUDE.md` §2.5).
-- **Recursos sin historial:** solo se guarda el último cambio de estado; el historial completo llegará con las asignaciones.
+- **Recursos sin historial de estados:** solo se guarda el último cambio manual; las asignaciones sí tienen historial. La Fase 5 necesitará un evento de recurso para el tiempo real.
 - **Iconos de catálogo:** el frontend importa uno a uno los iconos de Lucide que usan los tipos del catálogo; un tipo nuevo con otro icono mostrará uno genérico hasta añadirlo.
 - **Filtros de un solo valor en la interfaz** para estado y prioridad (la API ya admite varios).
 - **Prueba de extremo a extremo manual**, fuera del repositorio.
@@ -656,7 +723,7 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 
 ## 15. Implementado y pendiente
 
-### Implementado y funcional (Fases 1, 2 y 3)
+### Implementado y funcional (Fases 1 a 4)
 
 - **Infraestructura:** monorepo, Docker Compose con `db`, `backend` y `frontend`, `.env.example` documentado.
 - **Autenticación y RBAC:** login, refresh con rotación, logout, `/me`, permisos por rol en el backend y navegación y acciones filtradas en el frontend.
@@ -665,7 +732,8 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 - **Recursos:** catálogo de tipos, alta, consulta, edición, estado operativo y desactivación.
 - **Centro de mando:** KPIs, incidentes activos con filtros, panel lateral del incidente seleccionado y resumen de recursos, con datos reales.
 - **Ubicaciones y mapa:** `Location` con PostGIS (`Point` 4326, índice GiST), coordenadas validadas, `location_changed`, `GET /incidents/map` (GeoJSON y `bbox`), mapa del centro de mando con MapLibre y OpenFreeMap, selección mapa ↔ lista ↔ panel, minimapa en la ficha y selección de posición en el formulario.
-- **Seed simulado de Asturias:** organizaciones, usuarios, recursos, incidentes (con coordenadas aproximadas) e historial, todo marcado como simulado.
+- **Asignación de recursos y ETA:** bases de recursos, velocidades por tipo, `ResourceAssignment`, candidatos por ETA estimada (sin preselección), asignar, «en el lugar», retirar con motivo, reasignar, retirada al cerrar, `resources_assigned` automático, eventos en el historial y bases de los asignados en el mapa.
+- **Seed simulado de Asturias:** organizaciones, usuarios, recursos (con bases), incidentes (con coordenadas aproximadas), asignaciones e historial, todo marcado como simulado.
 - **API REST** documentada en OpenAPI y **frontend funcional** con tipos generados, i18n y sistema de diseño propio.
 - **Calidad:** tests, lint, comprobación de tipos y build en backend y frontend.
 
@@ -673,11 +741,10 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 
 | Funcionalidad | Qué existe hoy | Qué falta | Fase |
 |---|---|---|---|
-| Posiciones de recursos | `resources.municipality` textual | GPS o bases con coordenadas, y recursos en el mapa | Fase posterior |
+| Posiciones actuales de recursos | Base con coordenadas; `eta.origin` preparado | `resource_positions` (diseñada), recursos moviéndose en el mapa | Fase 5 |
 | Lógica espacial avanzada | Filtro por rectángulo con índice GiST | Distancias, rutas (OSRM), zonas de cobertura, clustering | Fase posterior |
 | Mapa sin conexión | `VITE_MAP_STYLE_URL` configurable | Estilo y teselas locales (PMTiles) | Fase posterior |
-| Asignación de recursos | Estado `resources_assigned` en el enum (inalcanzable) y estado `in_service` manual | `ResourceAssignment`, eventos de asignación e historial de recursos | Fase posterior |
-| ETA | — | Cálculo estimado por distancia y tipo | Fase posterior |
+| Rutas y ETA por carretera | ETA estimada en línea recta × sinuosidad | Rutas reales (OSRM u otras), tiempo de activación | Fase posterior |
 | WebSockets / tiempo real | Carpeta `app/realtime/` vacía; `IncidentEvent` preparado como fuente de eventos | EventBus y WebSocket | Fase 5 |
 | Redis | — | Solo si hay varios workers | Fase 5 |
 | Simulador | Carpeta `app/simulation/` vacía; columnas `is_simulated` | Generador a través de los servicios, `SIMULATION_ENABLED` | Fase 7 |

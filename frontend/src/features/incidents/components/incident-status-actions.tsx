@@ -6,6 +6,7 @@ import { MutationErrorAlert } from "@/components/ops/mutation-error-alert"
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
+import { useAssignments } from "@/features/assignments/hooks"
 
 import { useChangeIncidentStatus } from "../hooks"
 import { incidentErrorMessage, isIrreversible, STATUS_ICONS } from "../presentation"
@@ -32,6 +33,11 @@ export function IncidentStatusActions({
   const change = useChangeIncidentStatus(incident.id)
   const [confirming, setConfirming] = useState<IncidentStatus | null>(null)
   const [reason, setReason] = useState("")
+  // Cerrar o cancelar retira los recursos asignados: la confirmación los enumera.
+  const assignments = useAssignments(incident.id, {
+    enabled: confirming !== null && incident.active_assignments > 0,
+  })
+  const toRelease = (assignments.data ?? []).filter((a) => a.released_at === null)
 
   const targets = incident.allowed_transitions.filter(
     (target) => !isIrreversible(target) || canClose
@@ -119,6 +125,18 @@ export function IncidentStatusActions({
           if (confirming) apply(confirming, reason)
         }}
       >
+        {incident.active_assignments > 0 && (
+          <div className="flex flex-col gap-1 rounded-md border border-warning-border bg-warning-subtle p-2">
+            <p className="font-medium">
+              {t("incidents.actions.confirm.releases", { count: incident.active_assignments })}
+            </p>
+            <ul className="flex flex-wrap gap-x-3 font-data text-xs">
+              {toRelease.map((assignment) => (
+                <li key={assignment.id}>{assignment.resource.code}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <Field>
           <FieldLabel htmlFor={`${id}-reason`}>{t("incidents.actions.confirm.reason")}</FieldLabel>
           <Textarea

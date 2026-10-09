@@ -1,4 +1,4 @@
-import { FolderTree, Siren } from "lucide-react"
+import { FolderTree, Siren, Truck } from "lucide-react"
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router"
@@ -156,6 +156,22 @@ export function ActiveIncidentsPanel({
                     )}
                     <span className="truncate">{incident.title}</span>
                     {incident.is_simulated && <SimulatedPill />}
+                    {incident.active_assignments > 0 && (
+                      <span
+                        className="inline-flex shrink-0 items-center gap-0.5 font-data text-xs text-info"
+                        title={t("commandCenter.incidents.assigned", {
+                          count: incident.active_assignments,
+                        })}
+                      >
+                        <Truck aria-hidden className="size-3.5" />
+                        <span aria-hidden>{incident.active_assignments}</span>
+                        <span className="sr-only">
+                          {t("commandCenter.incidents.assigned", {
+                            count: incident.active_assignments,
+                          })}
+                        </span>
+                      </span>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell>

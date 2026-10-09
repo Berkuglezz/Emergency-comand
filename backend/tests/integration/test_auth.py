@@ -147,6 +147,8 @@ async def test_me_returns_profile_role_and_permissions(
     assert body["email"] == user.email
     assert body["role"] == "coordinator"
     assert body["permissions"] == [
+        "assignments:manage",
+        "assignments:update",
         "incidents:close",
         "incidents:create",
         "incidents:read",

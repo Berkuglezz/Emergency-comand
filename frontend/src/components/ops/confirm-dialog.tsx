@@ -24,6 +24,8 @@ interface ConfirmDialogProps {
   tone?: "default" | "destructive"
   /** Acción en curso: los botones se deshabilitan y no se puede cerrar. */
   pending?: boolean
+  /** Falta un dato obligatorio (p. ej. un motivo): no se puede confirmar todavía. */
+  confirmDisabled?: boolean
   onConfirm: () => void
   /** Elemento que abre el diálogo (normalmente un Button). */
   trigger?: ReactElement
@@ -48,6 +50,7 @@ export function ConfirmDialog({
   cancelLabel,
   tone = "default",
   pending = false,
+  confirmDisabled = false,
   onConfirm,
   trigger,
   open,
@@ -84,7 +87,7 @@ export function ConfirmDialog({
           </AlertDialogCancel>
           <AlertDialogAction
             variant={destructive ? "destructive" : "default"}
-            disabled={pending}
+            disabled={pending || confirmDisabled}
             onClick={onConfirm}
           >
             {pending ? t("common.processing") : confirmLabel}

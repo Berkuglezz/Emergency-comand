@@ -175,7 +175,7 @@ async def test_resource_with_type_and_organization(session: AsyncSession) -> Non
         type_id=resource_type.id,
         organization_id=organization.id,
         status=ResourceStatus.AVAILABLE,
-        municipality="Gijón",
+        base=Location(municipality="Gijón"),
     )
     session.add(resource)
     await session.flush()

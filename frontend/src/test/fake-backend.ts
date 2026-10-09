@@ -7,6 +7,7 @@ import { vi } from "vitest"
 
 import type { components } from "@/types/api"
 
+import { FakeAssignments } from "./fake-assignments"
 import { FakeIncidents } from "./fake-incidents"
 import { FakeResources } from "./fake-resources"
 
@@ -32,6 +33,8 @@ const PERMISSIONS: Record<Me["role"], Me["permissions"]> = {
     "resources:update_status",
     "resources:manage",
     "organizations:read",
+    "assignments:manage",
+    "assignments:update",
   ],
   coordinator: [
     "incidents:read",
@@ -41,8 +44,10 @@ const PERMISSIONS: Record<Me["role"], Me["permissions"]> = {
     "resources:read",
     "resources:update_status",
     "organizations:read",
+    "assignments:manage",
+    "assignments:update",
   ],
-  operator: ["incidents:read", "resources:read", "resources:update_status"],
+  operator: ["incidents:read", "resources:read", "resources:update_status", "assignments:update"],
 }
 
 export const TEST_PASSWORD = "test-password-123"
@@ -79,6 +84,7 @@ export class FakeBackend {
   failOrganizations = false
   readonly incidents = new FakeIncidents()
   readonly resources = new FakeResources(ORGANIZATION)
+  readonly assignments = new FakeAssignments(this.incidents, this.resources)
   /** El resumen del dashboard responde 500. */
   failDashboard = false
 
@@ -208,6 +214,7 @@ export class FakeBackend {
       })
     }
     return (
+      this.assignments.handle(method, path, query, user, body) ??
       this.incidents.handle(method, path, query, user, body) ??
       this.resources.handle(method, path, query, user, body) ??
       error(404, "not_found")

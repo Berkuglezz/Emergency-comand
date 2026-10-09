@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { type ReactNode, useId, useMemo } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { useTranslation } from "react-i18next"
 import type { z } from "zod"
 
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { CoordinatesFieldset } from "@/features/map/coordinates-fieldset"
 import type { Organization } from "@/features/organizations/hooks"
 import { useCodeLabel } from "@/lib/code-label"
 import { fieldProps } from "@/lib/form-a11y"
@@ -54,6 +55,15 @@ export function ResourceForm({
     defaultValues,
   })
   const { errors } = form.formState
+  const [latitudeText, longitudeText] = useWatch({
+    control: form.control,
+    name: ["latitude", "longitude"],
+  })
+  const setCoordinates = (latitude: string, longitude: string) => {
+    const options = { shouldDirty: true, shouldValidate: form.formState.isSubmitted }
+    form.setValue("latitude", latitude, options)
+    form.setValue("longitude", longitude, options)
+  }
 
   // Solo se ofrecen tipos y organizaciones activos, más los actuales del recurso
   // (puede seguir en uno que se desactivó después).
@@ -147,6 +157,36 @@ export function ResourceForm({
               {...form.register("municipality")}
             />
           </FormField>
+          <FormField
+            id={`${id}-base`}
+            label={t("resources.fields.baseDescription")}
+            error={errors.base_description}
+          >
+            <Input
+              maxLength={255}
+              {...fieldProps(`${id}-base`, errors.base_description)}
+              {...form.register("base_description")}
+            />
+          </FormField>
+        </div>
+
+        <CoordinatesFieldset
+          id={id}
+          legend={t("resources.fields.baseCoordinates")}
+          latitude={{
+            register: form.register("latitude"),
+            error: errors.latitude,
+            value: latitudeText,
+          }}
+          longitude={{
+            register: form.register("longitude"),
+            error: errors.longitude,
+            value: longitudeText,
+          }}
+          onChange={setCoordinates}
+        />
+
+        <div className="grid gap-4 sm:grid-cols-2">
           {mode === "create" && (
             <FormField
               id={`${id}-status`}

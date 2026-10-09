@@ -46,9 +46,11 @@ types_router = APIRouter(prefix="/incident-types", tags=["incidents"], responses
 router = APIRouter(prefix="/incidents", tags=["incidents"], responses=_ERRORS)
 
 
-def _detail(view: IncidentView) -> IncidentDetail:
+def incident_detail(view: IncidentView) -> IncidentDetail:
     incident = view.incident
-    summary = IncidentSummary.model_validate(incident)
+    summary = IncidentSummary.model_validate(incident).model_copy(
+        update={"active_assignments": view.active_assignments}
+    )
     return IncidentDetail(
         **summary.model_dump(),
         description=incident.description,
@@ -125,8 +127,14 @@ async def list_incidents(
         offset=offset,
     )
     items, total = await service.list_incidents(query)
+    counts = await service.active_assignment_counts(items)
     return IncidentPage(
-        items=[IncidentSummary.model_validate(item) for item in items],
+        items=[
+            IncidentSummary.model_validate(item).model_copy(
+                update={"active_assignments": counts.get(item.id, 0)}
+            )
+            for item in items
+        ],
         total=total,
         limit=limit,
         offset=offset,
@@ -168,19 +176,19 @@ async def map_incidents(
 async def create_incident(
     body: IncidentCreate, user: CurrentUserDep, service: IncidentServiceDep
 ) -> IncidentDetail:
-    return _detail(await service.create_incident(body, user))
+    return incident_detail(await service.create_incident(body, user))
 
 
 @router.get("/{incident_id}", dependencies=_READ)
 async def get_incident(incident_id: uuid.UUID, service: IncidentServiceDep) -> IncidentDetail:
-    return _detail(await service.get_incident(incident_id))
+    return incident_detail(await service.get_incident(incident_id))
 
 
 @router.patch("/{incident_id}", dependencies=_UPDATE)
 async def update_incident(
     incident_id: uuid.UUID, body: IncidentUpdate, user: CurrentUserDep, service: IncidentServiceDep
 ) -> IncidentDetail:
-    return _detail(await service.update_incident(incident_id, body, user))
+    return incident_detail(await service.update_incident(incident_id, body, user))
 
 
 @router.post("/{incident_id}/status", dependencies=_UPDATE)
@@ -191,7 +199,7 @@ async def change_incident_status(
     service: IncidentServiceDep,
 ) -> IncidentDetail:
     """Cambia el estado. Cerrar o cancelar exige además `incidents:close`."""
-    return _detail(await service.change_status(incident_id, body, user))
+    return incident_detail(await service.change_status(incident_id, body, user))
 
 
 @router.get("/{incident_id}/events", dependencies=_READ)

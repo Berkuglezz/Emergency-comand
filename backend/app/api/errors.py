@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError
 
 from app.domain.exceptions import (
     AuthenticationError,
@@ -65,6 +66,30 @@ async def _validation_error_handler(_: Request, exc: Exception) -> JSONResponse:
     )
 
 
+# Códigos SQLSTATE de PostgreSQL: interbloqueo detectado y fallo de serialización.
+_CONCURRENCY_SQLSTATES = frozenset({"40P01", "40001"})
+
+
+async def _database_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Si PostgreSQL aborta una transacción por concurrencia (p. ej. un
+    interbloqueo), no se ha guardado nada: se responde `409 concurrent_update`
+    para que el cliente recargue y decida. No se reintenta automáticamente.
+    Cualquier otro error de base de datos sigue siendo un 500 genérico."""
+    sqlstate = getattr(getattr(exc, "orig", None), "sqlstate", None)
+    if sqlstate in _CONCURRENCY_SQLSTATES:
+        logger.warning(
+            "Operación abortada por concurrencia en %s %s (%s)",
+            request.method,
+            request.url.path,
+            sqlstate,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content=ErrorResponse(detail="concurrent_update").model_dump(),
+        )
+    return await _unhandled_error_handler(request, exc)
+
+
 async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
     # Se registra el tipo y la ruta, no el mensaje: podría contener datos sensibles.
     logger.error(
@@ -82,4 +107,5 @@ async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResp
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(DomainError, _domain_error_handler)
     app.add_exception_handler(RequestValidationError, _validation_error_handler)
+    app.add_exception_handler(DBAPIError, _database_error_handler)
     app.add_exception_handler(Exception, _unhandled_error_handler)

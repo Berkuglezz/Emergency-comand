@@ -28,6 +28,7 @@ export const RESOURCE_STATUS_CODES = Object.keys(RESOURCE_STATUS_TONE) as Resour
 
 const KNOWN_ERRORS = [
   "version_conflict",
+  "concurrent_update",
   "invalid_transition",
   "resource_inactive",
   "resource_code_taken",
@@ -35,6 +36,9 @@ const KNOWN_ERRORS = [
   "organization_not_found",
   "resource_not_found",
   "field_not_nullable",
+  "resource_assigned",
+  "coordinates_incomplete",
+  "location_out_of_area",
   "permission_denied",
   "validation_error",
   "network_error",

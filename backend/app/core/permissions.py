@@ -21,6 +21,10 @@ class Permission(StrEnum):
     # Alta y edición de la ficha de un recurso (incluida la desactivación).
     RESOURCES_MANAGE = "resources:manage"
     ORGANIZATIONS_READ = "organizations:read"
+    # Asignar, retirar y reasignar recursos a incidentes.
+    ASSIGNMENTS_MANAGE = "assignments:manage"
+    # Marcar que un recurso asignado ha llegado al lugar.
+    ASSIGNMENTS_UPDATE = "assignments:update"
 
 
 P = Permission
@@ -36,14 +40,18 @@ ROLE_PERMISSIONS: dict[RoleCode, frozenset[Permission]] = {
             P.RESOURCES_READ,
             P.RESOURCES_UPDATE_STATUS,
             P.ORGANIZATIONS_READ,
+            P.ASSIGNMENTS_MANAGE,
+            P.ASSIGNMENTS_UPDATE,
         }
     ),
-    # Usuario operativo: consulta incidentes y actualiza el estado de recursos.
+    # Usuario operativo: consulta incidentes, actualiza el estado de recursos y
+    # marca la llegada de los asignados (no asigna ni retira).
     RoleCode.OPERATOR: frozenset(
         {
             P.INCIDENTS_READ,
             P.RESOURCES_READ,
             P.RESOURCES_UPDATE_STATUS,
+            P.ASSIGNMENTS_UPDATE,
         }
     ),
 }

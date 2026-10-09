@@ -101,7 +101,7 @@ describe("ficha de recurso", () => {
     expect(backend.resources.byCode("SIM-A-01")).toMatchObject({ status: "in_service", version: 2 })
     expect(
       screen.getByText(
-        "En esta fase no se guarda el historial del recurso: solo su último cambio de estado."
+        "Sin historial de estados: solo se guarda el último cambio. Las asignaciones se ven en cada incidente."
       )
     ).toBeInTheDocument()
   })

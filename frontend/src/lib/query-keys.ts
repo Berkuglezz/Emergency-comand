@@ -12,6 +12,10 @@ export const queryKeys = {
   incidentMap: (params: Record<string, unknown>) => ["incidents", "map", params] as const,
   incident: (id: string) => ["incidents", "detail", id] as const,
   incidentEvents: (id: string) => ["incidents", "detail", id, "events"] as const,
+  /** Bajo el detalle del incidente: invalidar `incidents` también las refresca. */
+  incidentAssignments: (id: string) => ["incidents", "detail", id, "assignments"] as const,
+  assignmentCandidates: (id: string, params: Record<string, unknown>) =>
+    ["incidents", "detail", id, "candidates", params] as const,
   resourceTypes: ["resource-types"] as const,
   /** Prefijo común: invalidarlo refresca listados y fichas de recursos. */
   resources: ["resources"] as const,

@@ -28,8 +28,8 @@ from app.schemas.incidents import (
     IncidentNoteCreate,
     IncidentStatusChange,
     IncidentUpdate,
-    LocationInput,
 )
+from app.schemas.locations import LocationInput
 from app.services.incidents import IncidentService
 
 # Tiempo que se espera para confirmar que una transacción está bloqueada.

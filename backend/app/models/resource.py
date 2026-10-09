@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, str_enum
 from app.domain.enums import ResourceStatus
+from app.models.location import Location
 from app.models.organization import Organization
 from app.models.resource_type import ResourceType
 
@@ -13,9 +14,11 @@ from app.models.resource_type import ResourceType
 class Resource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Recurso operativo de una organización.
 
-    Sin coordenadas ni geometría en la Fase 2: solo el municipio base. Sin
-    historial propio: `status_changed_at` registra el último cambio de estado.
-    No se borra: se desactiva con `is_active`.
+    - Base (dónde está destinado) en `Location` 1:1 (`base_location_id`): es
+      el origen de la ETA estimada. La posición actual/GPS es de la Fase 5.
+    - Sin historial propio: `status_changed_at` registra el último cambio de
+      estado; las asignaciones (`ResourceAssignment`) guardan su historial.
+    - No se borra: se desactiva con `is_active`.
     """
 
     __tablename__ = "resources"
@@ -32,13 +35,16 @@ class Resource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         str_enum(ResourceStatus, "resource_status"), index=True
     )
     status_changed_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    municipality: Mapped[str] = mapped_column(String(100))
+    base_location_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("locations.id", ondelete="RESTRICT"), unique=True
+    )
     is_active: Mapped[bool] = mapped_column(server_default=true())
     is_simulated: Mapped[bool] = mapped_column(server_default=false())
     version: Mapped[int] = mapped_column(server_default=text("1"))
 
     type: Mapped[ResourceType] = relationship(lazy="raise")
     organization: Mapped[Organization] = relationship(lazy="raise")
+    base: Mapped[Location] = relationship(lazy="raise")
 
     # eager_defaults: los valores calculados por la BD (updated_at, version…) se
     # leen en el mismo INSERT/UPDATE (RETURNING); en async no hay carga perezosa.

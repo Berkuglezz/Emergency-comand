@@ -4,16 +4,17 @@ Prototipo demostrable de una plataforma de coordinación de emergencias: un cent
 
 > **⚠️ Prototipo de demostración.** Emergency Command **no es un sistema real de emergencias** y **no está conectado** al 112, a servicios públicos ni a ninguna fuente real de datos. Todas las organizaciones, usuarios, recursos e incidentes que incluye son **ficticios y están marcados como simulados**.
 
-**Estado actual: Fase 3.** Funciona:
+**Estado actual: Fase 4.** Funciona:
 
 - autenticación y control de acceso por rol (RBAC);
 - **incidentes:** alta, edición, ciclo de vida con cambios de estado validados, incidente padre, historial (timeline) y notas;
 - **recursos:** alta, edición, estado operativo y desactivación;
 - **centro de mando** con datos reales: indicadores, **mapa** de incidentes activos, incidentes activos, incidente seleccionado y resumen de recursos;
 - **ubicaciones con PostGIS:** coordenadas validadas en cada incidente, minimapa en la ficha y selección de la posición en el mapa al dar de alta o editar;
+- **asignación de recursos:** candidatos ordenados por **ETA estimada** (el sistema informa; la persona decide y confirma), «en el lugar», retirada con motivo, reasignación y retirada automática al cerrar; bases de los recursos asignados en el mapa;
 - datos simulados de Asturias para la demo.
 
-Todavía **no** hay asignación de recursos, posiciones de recursos, rutas, ETA, tiempo real (WebSockets), simulador, IA ni hospitales: llegan en fases posteriores. La lista completa de lo implementado y lo pendiente está en [`docs/architecture.md`](docs/architecture.md#15-implementado-y-pendiente).
+Todavía **no** hay posiciones GPS de recursos, rutas por carretera, tiempo real (WebSockets), simulador, IA ni hospitales: llegan en fases posteriores. La ETA es siempre una **estimación** local (distancia × sinuosidad / velocidad media del tipo), sin servicios externos. La lista completa de lo implementado y lo pendiente está en [`docs/architecture.md`](docs/architecture.md#15-implementado-y-pendiente).
 
 ---
 
@@ -126,6 +127,8 @@ Qué puede hacer cada rol en esta fase:
 | Cerrar y cancelar incidentes | ✅ | ✅ | ❌ |
 | Cambiar el estado operativo de un recurso | ✅ | ✅ | ✅ |
 | Dar de alta, editar y desactivar recursos | ✅ | ❌ | ❌ |
+| Asignar, retirar y reasignar recursos a un incidente | ✅ | ✅ | ❌ |
+| Marcar que un recurso asignado está «en el lugar» | ✅ | ✅ | ✅ |
 | Ver organizaciones | ✅ | ✅ | ❌ |
 
 Lo que un rol no puede hacer no aparece en la interfaz, y la API responde 403 si se intenta igualmente.
@@ -136,7 +139,8 @@ Todos los datos demo viven en `backend/seeds/`, son ficticios y la interfaz los 
 
 - **4 organizaciones** de Asturias, con código `sim-…` y «(simulado)» en el nombre;
 - **3 usuarios**, uno por rol, con emails del dominio reservado `.test`, que no puede existir en internet;
-- **18 recursos** con código `SIM-…` (bomberos, sanitarios, protección civil y apoyo logístico);
+- **18 recursos** con código `SIM-…` (bomberos, sanitarios, protección civil y apoyo logístico), cada uno con una base simulada con coordenadas aproximadas;
+- **asignaciones de ejemplo** coherentes con los estados: los 5 recursos en servicio están asignados a incidentes activos, con su ETA estimada, una llegada, una retirada por «misión cumplida» y una retirada automática al cerrar un incidente;
 - **12 incidentes** en Oviedo, Gijón, Avilés y municipios cercanos, con todas las prioridades y estados, incluidos un temporal con dos incidentes agrupados, dos cerrados y uno cancelado, cada uno con su historial;
 - ubicaciones genéricas a nivel de municipio («Zona forestal (ubicación simulada)»): ningún teléfono, dirección, URL ni nombre corresponde a un servicio real;
 - coordenadas aproximadas (3 decimales, ≈100 m) en zonas genéricas de cada municipio, nunca sobre instalaciones de emergencias. Dos incidentes activos **no tienen coordenadas a propósito** (un temporal que afecta a una zona amplia y un aviso recién recibido), para mostrar ese caso.
@@ -215,12 +219,14 @@ Vite redirige `/api` al backend (`http://localhost:8000` por defecto; se cambia 
 - **Migraciones:**
   - la inicial habilita la extensión PostGIS y crea `roles`, `organizations`, `users` y `refresh_tokens`;
   - la de la Fase 2 crea los catálogos de tipos de incidente y de recurso, `incidents`, `incident_events` (historial de solo inserción) y `resources`;
-  - las de la Fase 3 crean `locations` (`geometry(Point, 4326)` con índice GiST), trasladan a ella la ubicación de cada incidente y añaden el evento `location_changed`.
+  - las de la Fase 3 crean `locations` (`geometry(Point, 4326)` con índice GiST), trasladan a ella la ubicación de cada incidente y añaden el evento `location_changed`;
+  - las de la Fase 4 añaden la velocidad media por tipo de recurso, la base de cada recurso (en `locations`) y `resource_assignments`.
 - Los roles y los catálogos de tipos se crean en las migraciones, no en el seed, porque el sistema los necesita en cualquier entorno.
 - El seed es idempotente y fuera de `development` se niega a ejecutarse:
   - **usuarios y organizaciones:** crea lo que falta y restaura los datos demo modificados;
   - **recursos e incidentes:** solo crea lo que falta y **nunca modifica lo existente**, así que los cambios que hagas durante una demo se conservan aunque se vuelva a ejecutar.
 - **Volver a los datos de demostración iniciales:** `docker compose down -v` borra la base de datos (⚠️ también cualquier dato que hayas creado); el siguiente `docker compose up` la recrea, migra y carga el seed desde cero.
+- **Base de datos creada antes de la Fase 4:** las bases de los recursos se quedan sin coordenadas y no hay asignaciones de ejemplo, porque el seed no modifica lo existente. Reinicia la base de datos con `docker compose down -v` para tener los datos demo completos.
 - **Base de datos creada antes de la Fase 3:** las migraciones añaden la tabla de ubicaciones, pero los incidentes que ya existían se quedan **sin coordenadas**, porque el seed no modifica lo existente. Para tener los datos demo con coordenadas, reinicia la base de datos con `docker compose down -v` y vuelve a arrancar con `docker compose up --build`.
 
 ---

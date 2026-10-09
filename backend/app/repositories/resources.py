@@ -9,7 +9,7 @@ from sqlalchemy.orm import joinedload
 
 from app.domain.enums import ResourceStatus
 from app.domain.resource_rules import STATUS_RANK
-from app.models import Resource, ResourceType
+from app.models import Location, Resource, ResourceType
 from app.repositories.incidents import escape_like
 
 _STATUS_ORDER = case(STATUS_RANK, value=Resource.status)
@@ -56,12 +56,17 @@ class ResourceRepository:
         statement = (
             select(Resource)
             .where(Resource.id == resource_id)
-            .options(joinedload(Resource.type), joinedload(Resource.organization))
+            .options(
+                joinedload(Resource.type),
+                joinedload(Resource.organization),
+                joinedload(Resource.base),
+            )
             # Relee la fila aunque ya esté en la sesión (p. ej. tras cambiar el tipo).
             .execution_options(populate_existing=True)
         )
         if for_update:
-            # Bloquea solo la fila del recurso, no las del tipo o la organización.
+            # Bloquea solo la fila del recurso, no las del tipo, la organización
+            # o la base: todo cambio de la base pasa por ella.
             statement = statement.with_for_update(of=Resource)
         return (await self._session.scalars(statement)).unique().one_or_none()
 
@@ -74,7 +79,11 @@ class ResourceRepository:
             select(func.count()).select_from(filtered.order_by(None).subquery())
         )
         statement = (
-            filtered.options(joinedload(Resource.type), joinedload(Resource.organization))
+            filtered.options(
+                joinedload(Resource.type),
+                joinedload(Resource.organization),
+                joinedload(Resource.base),
+            )
             .order_by(*self._ordering(query.sort))
             .limit(query.limit)
             .offset(query.offset)
@@ -104,8 +113,9 @@ class ResourceRepository:
         if query.organization_id:
             statement = statement.where(Resource.organization_id == query.organization_id)
         if query.municipality:
-            statement = statement.where(
-                func.lower(Resource.municipality) == query.municipality.lower()
+            # Municipio de la base del recurso.
+            statement = statement.join(Resource.base).where(
+                func.lower(Location.municipality) == query.municipality.lower()
             )
         if query.search:
             pattern = f"%{escape_like(query.search)}%"

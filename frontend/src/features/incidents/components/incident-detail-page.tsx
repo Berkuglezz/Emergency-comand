@@ -13,6 +13,7 @@ import { SimulatedPill } from "@/components/ops/simulated-pill"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { AssignmentsPanel } from "@/features/assignments/components/assignments-panel"
 import { hasPermission, useSession } from "@/features/auth/hooks"
 import { ApiError } from "@/lib/api-client"
 import { formatNumber } from "@/lib/format"
@@ -96,6 +97,7 @@ export function IncidentDetailPage() {
             canEdit={canUpdate && data.closed_at === null}
             onReload={reload}
           />
+          <AssignmentsPanel incident={data} onReload={reload} />
           <Hierarchy incident={data} />
         </div>
         <IncidentTimeline

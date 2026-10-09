@@ -74,6 +74,8 @@ function useApplyIncident() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.incidents })
     // Los KPIs del centro de mando dependen de estados y prioridades.
     void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard })
+    // Cerrar o cancelar retira los recursos asignados: cambia su estado.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.resources })
   }
 }
 

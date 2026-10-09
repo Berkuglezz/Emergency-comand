@@ -248,6 +248,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/incidents/{incident_id}/assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Incident Assignments
+         * @description Asignaciones del incidente: activas primero y después el historial.
+         */
+        get: operations["list_incident_assignments_api_v1_incidents__incident_id__assignments_get"];
+        put?: never;
+        /**
+         * Assign Resource
+         * @description Asigna un recurso disponible. Con `reassign: true`, si está asignado a otro
+         *     incidente, se retira de él y se asigna a este en la misma transacción.
+         */
+        post: operations["assign_resource_api_v1_incidents__incident_id__assignments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}/assignment-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Assignment Candidates
+         * @description Recursos asignables ordenados por ETA **estimada** (sin estimación, al final),
+         *     con los tipos sugeridos marcados. Ayuda a la decisión: no se preselecciona ninguno.
+         *     `include_assigned=true` añade los asignados a otros incidentes (exigen reasignar).
+         */
+        get: operations["list_assignment_candidates_api_v1_incidents__incident_id__assignment_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assignments/{assignment_id}/arrival": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Arrival
+         * @description Marca que el recurso ha llegado al lugar. No cambia el estado del incidente.
+         */
+        post: operations["mark_arrival_api_v1_assignments__assignment_id__arrival_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assignments/{assignment_id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release Resource
+         * @description Retira el recurso con un motivo (`completed`, `not_needed` o `unavailable`).
+         */
+        post: operations["release_resource_api_v1_assignments__assignment_id__release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/resource-types": {
         parameters: {
             query?: never;
@@ -348,11 +435,122 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AssignedResource */
+        AssignedResource: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            status: components["schemas"]["ResourceStatus"];
+            type: components["schemas"]["ResourceTypeResponse"];
+            organization: components["schemas"]["OrganizationSummary"];
+            base: components["schemas"]["LocationResponse"];
+            /** Is Simulated */
+            is_simulated: boolean;
+        };
+        /** AssignmentArrival */
+        AssignmentArrival: {
+            /** Version */
+            version: number;
+        };
+        /**
+         * AssignmentCandidate
+         * @description Recurso que se puede asignar, con su ETA estimada desde la base. Es
+         *     ayuda a la decisión: la lista se ordena por ETA, pero nunca se preselecciona
+         *     ni se asigna nada automáticamente.
+         */
+        AssignmentCandidate: {
+            resource: components["schemas"]["AssignedResource"];
+            eta: components["schemas"]["EtaResponse"] | null;
+            eta_unavailable: components["schemas"]["EtaUnavailable"] | null;
+            /** Suggested */
+            suggested: boolean;
+            current_incident: components["schemas"]["IncidentCodeRef"] | null;
+        };
+        /** AssignmentCreate */
+        AssignmentCreate: {
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Version */
+            version: number;
+            /**
+             * Reassign
+             * @default false
+             */
+            reassign: boolean;
+        };
+        /** AssignmentRelease */
+        AssignmentRelease: {
+            /** Version */
+            version: number;
+            reason: components["schemas"]["ReleaseReason"];
+        };
+        /** AssignmentResponse */
+        AssignmentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Incident Id
+             * Format: uuid
+             */
+            incident_id: string;
+            resource: components["schemas"]["AssignedResource"];
+            /**
+             * Assigned At
+             * Format: date-time
+             */
+            assigned_at: string;
+            /** Arrived At */
+            arrived_at: string | null;
+            /** Released At */
+            released_at: string | null;
+            release_reason: components["schemas"]["ReleaseReason"] | null;
+            eta: components["schemas"]["EtaResponse"] | null;
+            /** Is Simulated */
+            is_simulated: boolean;
+        };
         /**
          * ComponentStatus
          * @enum {string}
          */
         ComponentStatus: "ok" | "unavailable";
+        /**
+         * CurrentAssignment
+         * @description Asignación activa de un recurso.
+         */
+        CurrentAssignment: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Incident Id
+             * Format: uuid
+             */
+            incident_id: string;
+            /** Incident Code */
+            incident_code: string;
+            /**
+             * Assigned At
+             * Format: date-time
+             */
+            assigned_at: string;
+            /** Arrived At */
+            arrived_at: string | null;
+            eta: components["schemas"]["EtaResponse"] | null;
+        };
         /** DashboardSummary */
         DashboardSummary: {
             /**
@@ -371,6 +569,29 @@ export interface components {
             /** Detail */
             detail: string;
         };
+        /**
+         * EtaOrigin
+         * @enum {string}
+         */
+        EtaOrigin: "base" | "last_position";
+        /**
+         * EtaResponse
+         * @description ETA **estimada** (distancia * sinuosidad / velocidad media del tipo).
+         *     `distance_km` es la distancia estimada por carretera.
+         */
+        EtaResponse: {
+            /** Minutes */
+            minutes: number;
+            /** Distance Km */
+            distance_km: number;
+            origin: components["schemas"]["EtaOrigin"];
+        };
+        /**
+         * EtaUnavailable
+         * @description Motivo por el que no se puede estimar.
+         * @enum {string}
+         */
+        EtaUnavailable: "incident_without_coordinates" | "resource_without_position";
         /** EventActor */
         EventActor: {
             /**
@@ -401,6 +622,16 @@ export interface components {
          * @enum {string}
          */
         IncidentCategory: "fire" | "traffic" | "medical" | "rescue" | "weather" | "hazmat" | "geological";
+        /** IncidentCodeRef */
+        IncidentCodeRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+        };
         /** IncidentCreate */
         IncidentCreate: {
             /**
@@ -456,6 +687,11 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Active Assignments
+             * @default 0
+             */
+            active_assignments: number;
             /** Description */
             description: string | null;
             /** Details */
@@ -501,7 +737,7 @@ export interface components {
          * @description Tipos de entrada del historial funcional del incidente (timeline).
          * @enum {string}
          */
-        IncidentEventType: "incident_created" | "status_changed" | "priority_changed" | "incident_updated" | "note_added" | "parent_changed" | "location_changed";
+        IncidentEventType: "incident_created" | "status_changed" | "priority_changed" | "incident_updated" | "note_added" | "parent_changed" | "location_changed" | "resource_assigned" | "resource_arrived" | "resource_released";
         /** IncidentKpis */
         IncidentKpis: {
             /** Active Total */
@@ -656,6 +892,11 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Active Assignments
+             * @default 0
+             */
+            active_assignments: number;
         };
         /** IncidentTypeResponse */
         IncidentTypeResponse: {
@@ -800,7 +1041,7 @@ export interface components {
          * Permission
          * @enum {string}
          */
-        Permission: "incidents:read" | "incidents:create" | "incidents:update" | "incidents:close" | "resources:read" | "resources:update_status" | "resources:manage" | "organizations:read";
+        Permission: "incidents:read" | "incidents:create" | "incidents:update" | "incidents:close" | "resources:read" | "resources:update_status" | "resources:manage" | "organizations:read" | "assignments:manage" | "assignments:update";
         /** PointGeometry */
         PointGeometry: {
             /**
@@ -815,6 +1056,12 @@ export interface components {
                 number
             ];
         };
+        /**
+         * ReleaseReason
+         * @description Motivo de la retirada de un recurso de un incidente.
+         * @enum {string}
+         */
+        ReleaseReason: "completed" | "not_needed" | "unavailable" | "reassigned" | "incident_closed";
         /**
          * ResourceCategory
          * @enum {string}
@@ -836,8 +1083,7 @@ export interface components {
              * Format: uuid
              */
             organization_id: string;
-            /** Municipality */
-            municipality: string;
+            base: components["schemas"]["LocationInput"];
             status?: components["schemas"]["ResourceStatus"] | null;
         };
         /** ResourceKpis */
@@ -881,8 +1127,8 @@ export interface components {
              * Format: date-time
              */
             status_changed_at: string;
-            /** Municipality */
-            municipality: string;
+            base: components["schemas"]["LocationResponse"];
+            current_assignment?: components["schemas"]["CurrentAssignment"] | null;
             /** Is Active */
             is_active: boolean;
             /** Is Simulated */
@@ -923,6 +1169,8 @@ export interface components {
             category: components["schemas"]["ResourceCategory"];
             /** Icon */
             icon: string;
+            /** Average Speed Kmh */
+            average_speed_kmh: number;
             /** Is Active */
             is_active: boolean;
         };
@@ -941,8 +1189,7 @@ export interface components {
             type_id?: string | null;
             /** Organization Id */
             organization_id?: string | null;
-            /** Municipality */
-            municipality?: string | null;
+            base?: components["schemas"]["LocationInput"] | null;
             /** Is Active */
             is_active?: boolean | null;
         };
@@ -1784,6 +2031,357 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IncidentEventResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_incident_assignments_api_v1_incidents__incident_id__assignments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignmentResponse"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    assign_resource_api_v1_incidents__incident_id__assignments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentDetail"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_assignment_candidates_api_v1_incidents__incident_id__assignment_candidates_get: {
+        parameters: {
+            query?: {
+                type?: string | null;
+                organization_id?: string | null;
+                include_assigned?: boolean;
+            };
+            header?: never;
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignmentCandidate"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    mark_arrival_api_v1_assignments__assignment_id__arrival_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignmentArrival"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentDetail"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    release_resource_api_v1_assignments__assignment_id__release_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignmentRelease"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentDetail"];
                 };
             };
             /** @description Unauthorized */

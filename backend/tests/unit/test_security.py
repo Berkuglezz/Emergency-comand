@@ -133,6 +133,8 @@ PERMISSION_MATRIX: dict[Permission, tuple[bool, bool, bool]] = {
     Permission.RESOURCES_UPDATE_STATUS: (True, True, True),
     Permission.RESOURCES_MANAGE: (True, False, False),
     Permission.ORGANIZATIONS_READ: (True, True, False),
+    Permission.ASSIGNMENTS_MANAGE: (True, True, False),
+    Permission.ASSIGNMENTS_UPDATE: (True, True, True),
 }
 
 

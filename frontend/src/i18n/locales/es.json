@@ -102,14 +102,18 @@
       "empty": "No hay incidentes activos.",
       "emptyFiltered": "Ningún incidente activo coincide con los filtros.",
       "viewAll": "Ver todos",
-      "select": "Ver {{code}} en el panel lateral"
+      "select": "Ver {{code}} en el panel lateral",
+      "assigned_one": "{{count}} recurso asignado",
+      "assigned_other": "{{count}} recursos asignados"
     },
     "detail": {
       "title": "Incidente seleccionado",
       "empty": "Selecciona un incidente de la lista para ver su resumen.",
       "lastEvents": "Últimos eventos",
       "open": "Abrir ficha completa",
-      "close": "Cerrar panel"
+      "close": "Cerrar panel",
+      "assigned_one": "Recurso asignado",
+      "assigned_other": "Recursos asignados ({{count}})"
     },
     "resources": {
       "title": "Recursos",
@@ -137,6 +141,100 @@
       "zoomIn": "Acercar",
       "zoomOut": "Alejar",
       "resetBearing": "Orientar al norte"
+    }
+  },
+  "coordinates": {
+    "latitude": "Latitud",
+    "longitude": "Longitud",
+    "hint": "Opcional. Grados decimales WGS84 (latitud y longitud), dentro de Asturias.",
+    "latitudePlaceholder": "43.3614",
+    "longitudePlaceholder": "-5.8494",
+    "pick": "Elegir en el mapa",
+    "clear": "Quitar coordenadas",
+    "pickTitle": "Elegir la posición",
+    "pickDescription": "Haz clic en el mapa o arrastra el punto y confirma la posición.",
+    "pickMapLabel": "Mapa para elegir la posición",
+    "pickNone": "Todavía no hay ninguna posición elegida.",
+    "pickConfirm": "Usar esta posición",
+    "validation": {
+      "latitudeInvalid": "Latitud no válida: número decimal entre -90 y 90.",
+      "longitudeInvalid": "Longitud no válida: número decimal entre -180 y 180.",
+      "incomplete": "Indica latitud y longitud, o deja ambas vacías.",
+      "outOfArea": "La posición está fuera del área de la demo (Asturias). ¿Están intercambiadas la latitud y la longitud?"
+    }
+  },
+  "assignments": {
+    "title": "Recursos asignados",
+    "count_one": "{{count}} activo",
+    "count_other": "{{count}} activos",
+    "assign": "Asignar recurso",
+    "empty": "Sin recursos asignados.",
+    "active": "Recursos asignados ahora",
+    "history_one": "Historial ({{count}})",
+    "history_other": "Historial ({{count}})",
+    "released": "Retirado ({{reason}})",
+    "onScene": "En el lugar",
+    "enRoute": "Asignado, en camino",
+    "markArrival": "En el lugar",
+    "markArrivalFor": "Marcar {{code}} en el lugar",
+    "release": "Retirar",
+    "releaseFor": "Retirar {{code}}",
+    "reasons": {
+      "completed": "Misión cumplida",
+      "not_needed": "Ya no hace falta",
+      "unavailable": "Avería o incidencia",
+      "reassigned": "Reasignado a otro incidente",
+      "incident_closed": "Incidente cerrado"
+    },
+    "confirmRelease": {
+      "title": "¿Retirar {{code}}?",
+      "description": "El recurso dejará de estar asignado a este incidente.",
+      "reason": "Motivo (obligatorio)",
+      "selectReason": "Elige un motivo"
+    },
+    "dialog": {
+      "title": "Asignar recurso a {{code}}",
+      "description": "El sistema ordena los recursos por ETA estimada; tú eliges y confirmas. Nada se asigna automáticamente.",
+      "type": "Tipo de recurso",
+      "includeAssigned": "Incluir recursos asignados a otros incidentes",
+      "candidates": "Recursos",
+      "sortedByEta": "Ordenados por ETA estimada (sin estimación, al final)",
+      "empty": "No hay recursos que coincidan.",
+      "suggested": "Sugerido",
+      "columns": {
+        "resource": "Recurso",
+        "type": "Tipo",
+        "organization": "Organización",
+        "eta": "ETA",
+        "action": "Acción"
+      },
+      "assign": "Asignar",
+      "assignFor": "Asignar {{code}}",
+      "reassign": "Reasignar desde {{incident}}",
+      "reassignFor": "Reasignar {{code}} desde {{incident}}"
+    },
+    "confirmReassign": {
+      "title": "¿Reasignar {{code}} de {{from}} a {{to}}?",
+      "description": "Se retirará de {{from}} (motivo: reasignado) y se asignará a este incidente en una sola operación.",
+      "confirm": "Reasignar"
+    },
+    "errors": {
+      "version_conflict": "Otra persona ha modificado el incidente. Recarga para ver la versión actual.",
+      "resource_already_assigned": "El recurso ya está asignado a un incidente.",
+      "resource_not_available": "El recurso no está disponible.",
+      "resource_inactive": "El recurso está desactivado.",
+      "resource_not_found": "El recurso no existe.",
+      "incident_closed": "El incidente está finalizado.",
+      "incident_not_found": "El incidente no existe.",
+      "assignment_not_found": "La asignación no existe.",
+      "assignment_already_released": "El recurso ya se retiró.",
+      "assignment_already_arrived": "Ya constaba en el lugar.",
+      "invalid_release_reason": "Elige un motivo válido.",
+      "permission_denied": "No tienes permiso para esta acción.",
+      "validation_error": "Revisa los datos enviados.",
+      "network_error": "No se puede contactar con el servidor.",
+      "unexpected": "Se ha producido un error inesperado. Inténtalo de nuevo.",
+      "concurrent_update": "Otra operación simultánea ha impedido guardar el cambio. No se ha guardado nada: recarga y vuelve a intentarlo."
     }
   },
   "organizations": {
@@ -216,9 +314,7 @@
       "risks": "Riesgos frecuentes",
       "suggestedResources": "Recursos sugeridos",
       "selectType": "Selecciona un tipo",
-      "coordinates": "Coordenadas",
-      "latitude": "Latitud",
-      "longitude": "Longitud"
+      "coordinates": "Coordenadas"
     },
     "detail": {
       "summary": "Resumen",
@@ -250,7 +346,9 @@
         "cancelledDescription": "Quedará cancelado: no se podrá reabrir ni editar. Solo admitirá notas.",
         "keep": "No, mantener",
         "reason": "Motivo (opcional)",
-        "reasonPlaceholder": "Queda registrado en el historial."
+        "reasonPlaceholder": "Queda registrado en el historial.",
+        "releases_one": "Se retirará el recurso asignado:",
+        "releases_other": "Se retirarán los {{count}} recursos asignados:"
       }
     },
     "timeline": {
@@ -267,7 +365,15 @@
       "parentSet": "Agrupado en {{to}}",
       "parentRemoved": "Separado de {{from}}",
       "parentMoved": "Movido de {{from}} a {{to}}",
-      "locationFromTo": "Antes: {{from}}\nAhora: {{to}}"
+      "locationFromTo": "Antes: {{from}}\nAhora: {{to}}",
+      "automaticByAssignment": "Automático por la asignación de recursos",
+      "resourceAssigned": "Recurso asignado: {{resource}}",
+      "eta": "ETA estimada: ≈ {{minutes}} min · {{distance}} km",
+      "noEta": "Sin ETA estimada",
+      "reassignedFrom": "Reasignado desde {{from}}",
+      "resourceArrived": "{{resource}} en el lugar",
+      "resourceReleased": "Recurso retirado: {{resource}}",
+      "reassignedTo": "Reasignado a {{to}}"
     },
     "notes": {
       "label": "Nota",
@@ -292,11 +398,7 @@
       "numberRange": "Introduce un valor entre {{min}} y {{max}}.",
       "decimalNumber": "Introduce un número con dos decimales como máximo.",
       "noteRequired": "Escribe la nota.",
-      "noteTooLong": "La nota admite como máximo 2000 caracteres.",
-      "latitudeInvalid": "Latitud no válida: número decimal entre -90 y 90.",
-      "longitudeInvalid": "Longitud no válida: número decimal entre -180 y 180.",
-      "coordinatesIncomplete": "Indica latitud y longitud, o deja ambas vacías.",
-      "outOfArea": "La posición está fuera del área de la demo (Asturias). ¿Están intercambiadas la latitud y la longitud?"
+      "noteTooLong": "La nota admite como máximo 2000 caracteres."
     },
     "errors": {
       "version_conflict": "Otra persona ha modificado el incidente. Recarga para ver la versión actual.",
@@ -313,22 +415,13 @@
       "network_error": "No se puede contactar con el servidor. Comprueba la conexión.",
       "unexpected": "Se ha producido un error inesperado. Inténtalo de nuevo.",
       "coordinates_incomplete": "Indica latitud y longitud, o deja ambas vacías.",
-      "location_out_of_area": "La posición está fuera del área de la demo (Asturias)."
+      "location_out_of_area": "La posición está fuera del área de la demo (Asturias).",
+      "concurrent_update": "Otra operación simultánea ha impedido guardar el cambio. No se ha guardado nada: recarga y vuelve a intentarlo."
     },
     "location": {
       "noCoordinates": "Sin coordenadas",
       "noCoordinatesHint": "Se pueden añadir al editar el incidente.",
-      "mapLabel": "Mapa de la ubicación de {{code}}",
-      "coordinatesHint": "Opcional. Grados decimales WGS84 (latitud y longitud), dentro de Asturias.",
-      "latitudePlaceholder": "43.3614",
-      "longitudePlaceholder": "-5.8494",
-      "pick": "Elegir en el mapa",
-      "clear": "Quitar coordenadas",
-      "pickTitle": "Elegir la posición",
-      "pickDescription": "Haz clic en el mapa o arrastra el punto y confirma la posición.",
-      "pickMapLabel": "Mapa para elegir la posición",
-      "pickNone": "Todavía no hay ninguna posición elegida.",
-      "pickConfirm": "Usar esta posición"
+      "mapLabel": "Mapa de la ubicación de {{code}}"
     }
   },
   "incidentStatus": {
@@ -463,18 +556,20 @@
       "statusChangedAt": "Último cambio de estado",
       "updatedAt": "Actualizado",
       "selectType": "Selecciona un tipo",
-      "selectOrganization": "Selecciona una organización"
+      "selectOrganization": "Selecciona una organización",
+      "baseDescription": "Descripción de la base",
+      "baseCoordinates": "Coordenadas de la base"
     },
     "detail": {
       "summary": "Ficha",
       "notFound": "El recurso no existe o ya no está disponible.",
       "inactiveNotice": "Recurso desactivado: no cambia de estado hasta que se reactive.",
-      "noHistory": "En esta fase no se guarda el historial del recurso: solo su último cambio de estado.",
       "editTitle": "Editar recurso",
       "conflict": {
         "title": "El recurso ha cambiado",
         "description": "Otra persona lo ha modificado mientras lo tenías abierto. Recarga para ver la versión actual antes de volver a intentarlo."
-      }
+      },
+      "noStatusHistory": "Sin historial de estados: solo se guarda el último cambio. Las asignaciones se ven en cada incidente."
     },
     "actions": {
       "label": "Estado operativo",
@@ -504,7 +599,8 @@
       "typeRequired": "Selecciona el tipo de recurso.",
       "organizationRequired": "Selecciona la organización.",
       "municipalityRequired": "Indica el municipio base.",
-      "municipalityTooLong": "El municipio admite como máximo 100 caracteres."
+      "municipalityTooLong": "El municipio admite como máximo 100 caracteres.",
+      "baseDescriptionTooLong": "La descripción de la base admite como máximo 255 caracteres."
     },
     "errors": {
       "version_conflict": "Otra persona ha modificado el recurso. Recarga para ver la versión actual.",
@@ -518,7 +614,18 @@
       "permission_denied": "Tu rol no tiene permiso para esta acción.",
       "validation_error": "Hay datos no válidos en el formulario.",
       "network_error": "No se puede contactar con el servidor. Comprueba la conexión.",
-      "unexpected": "Se ha producido un error inesperado. Inténtalo de nuevo."
+      "unexpected": "Se ha producido un error inesperado. Inténtalo de nuevo.",
+      "resource_assigned": "El recurso está asignado a un incidente: retíralo desde el incidente.",
+      "coordinates_incomplete": "Indica latitud y longitud, o deja ambas vacías.",
+      "location_out_of_area": "La posición está fuera del área de la demo (Asturias).",
+      "concurrent_update": "Otra operación simultánea ha impedido guardar el cambio. No se ha guardado nada: recarga y vuelve a intentarlo."
+    },
+    "assignment": {
+      "assignedTo": "Asignado a",
+      "since": "desde",
+      "arrived": "en el lugar",
+      "statusLocked": "Mientras esté asignado, su estado lo gobierna la asignación: se retira desde el incidente.",
+      "inIncident": "→ {{code}}"
     }
   },
   "resourceStatus": {
@@ -566,6 +673,21 @@
     "simulatedHint": "Dato simulado de demostración",
     "marker": {
       "priority": "prioridad {{priority}}"
+    },
+    "eta": {
+      "value": "≈ {{minutes}} min · {{distance}} km",
+      "estimated": "(estimado)",
+      "arrival": "llegada estimada {{time}}",
+      "short": "≈ {{minutes}} min · {{distance}} km (estimado)",
+      "none": "Sin estimación",
+      "unavailable": {
+        "incident_without_coordinates": "Sin estimación: el incidente no tiene coordenadas",
+        "resource_without_position": "Sin estimación: la base no tiene coordenadas"
+      }
+    },
+    "resourceMarker": {
+      "label": "Base de recursos asignados: {{resources}}",
+      "item": "{{code}}, {{type}}, ETA {{eta}}"
     }
   },
   "errors": {
@@ -600,6 +722,8 @@
       "table": "Tabla",
       "priorityBadge": "PriorityBadge",
       "incidentMarker": "IncidentMarker",
+      "resourceMarker": "ResourceMarker",
+      "etaText": "EtaText",
       "statusPill": "StatusPill",
       "kpiTile": "KpiTile",
       "panel": "Panel",

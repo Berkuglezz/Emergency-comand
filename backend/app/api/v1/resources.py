@@ -6,9 +6,12 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.v1.deps import ResourceServiceDep, require_permission
 from app.core.permissions import Permission
 from app.domain.enums import ResourceStatus
+from app.models import Resource, ResourceAssignment
 from app.repositories.resources import ResourceListQuery
 from app.schemas.errors import ErrorResponse
 from app.schemas.resources import (
+    CurrentAssignment,
+    EtaResponse,
     ResourceCreate,
     ResourcePage,
     ResourceResponse,
@@ -31,6 +34,46 @@ _UPDATE_STATUS = [Depends(require_permission(Permission.RESOURCES_UPDATE_STATUS)
 
 types_router = APIRouter(prefix="/resource-types", tags=["resources"], responses=_ERRORS)
 router = APIRouter(prefix="/resources", tags=["resources"], responses=_ERRORS)
+
+
+def assignment_eta(assignment: ResourceAssignment) -> EtaResponse | None:
+    """Estimación guardada en la asignación (no se recalcula)."""
+    if (
+        assignment.eta_minutes is None
+        or assignment.eta_distance_km is None
+        or assignment.eta_origin is None
+    ):
+        return None
+    return EtaResponse(
+        minutes=assignment.eta_minutes,
+        distance_km=float(assignment.eta_distance_km),
+        origin=assignment.eta_origin,
+    )
+
+
+def _response(
+    resource: Resource, current: dict[uuid.UUID, tuple[ResourceAssignment, str]]
+) -> ResourceResponse:
+    response = ResourceResponse.model_validate(resource)
+    if (found := current.get(resource.id)) is None:
+        return response
+    assignment, incident_code = found
+    return response.model_copy(
+        update={
+            "current_assignment": CurrentAssignment(
+                id=assignment.id,
+                incident_id=assignment.incident_id,
+                incident_code=incident_code,
+                assigned_at=assignment.assigned_at,
+                arrived_at=assignment.arrived_at,
+                eta=assignment_eta(assignment),
+            )
+        }
+    )
+
+
+async def _one(service: ResourceServiceDep, resource: Resource) -> ResourceResponse:
+    return _response(resource, await service.current_assignments([resource]))
 
 
 @types_router.get("", dependencies=_READ)
@@ -64,8 +107,9 @@ async def list_resources(
         offset=offset,
     )
     items, total = await service.list_resources(query)
+    current = await service.current_assignments(items)
     return ResourcePage(
-        items=[ResourceResponse.model_validate(item) for item in items],
+        items=[_response(item, current) for item in items],
         total=total,
         limit=limit,
         offset=offset,
@@ -74,12 +118,12 @@ async def list_resources(
 
 @router.post("", status_code=status.HTTP_201_CREATED, dependencies=_MANAGE)
 async def create_resource(body: ResourceCreate, service: ResourceServiceDep) -> ResourceResponse:
-    return ResourceResponse.model_validate(await service.create_resource(body))
+    return await _one(service, await service.create_resource(body))
 
 
 @router.get("/{resource_id}", dependencies=_READ)
 async def get_resource(resource_id: uuid.UUID, service: ResourceServiceDep) -> ResourceResponse:
-    return ResourceResponse.model_validate(await service.get_resource(resource_id))
+    return await _one(service, await service.get_resource(resource_id))
 
 
 @router.patch("/{resource_id}", dependencies=_MANAGE)
@@ -87,11 +131,11 @@ async def update_resource(
     resource_id: uuid.UUID, body: ResourceUpdate, service: ResourceServiceDep
 ) -> ResourceResponse:
     """Edita la ficha (incluida la desactivación con `is_active`). No cambia el estado."""
-    return ResourceResponse.model_validate(await service.update_resource(resource_id, body))
+    return await _one(service, await service.update_resource(resource_id, body))
 
 
 @router.post("/{resource_id}/status", dependencies=_UPDATE_STATUS)
 async def change_resource_status(
     resource_id: uuid.UUID, body: ResourceStatusChange, service: ResourceServiceDep
 ) -> ResourceResponse:
-    return ResourceResponse.model_validate(await service.change_status(resource_id, body))
+    return await _one(service, await service.change_status(resource_id, body))

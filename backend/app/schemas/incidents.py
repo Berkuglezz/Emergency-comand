@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.domain.enums import (
     IncidentCategory,
@@ -16,25 +16,10 @@ from app.domain.enums import (
     IncidentPriority,
     IncidentStatus,
 )
-from app.domain.geo import LATITUDE_RANGE, LONGITUDE_RANGE, round_coordinate
+from app.schemas.locations import LocationInput, LocationResponse
 
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 Description = Annotated[str, StringConstraints(strip_whitespace=True, max_length=5000)]
-Municipality = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)
-]
-LocationDescription = Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)]
-# Grados decimales WGS84; sin NaN ni infinitos, redondeados a 6 decimales.
-Latitude = Annotated[
-    float,
-    Field(ge=LATITUDE_RANGE[0], le=LATITUDE_RANGE[1], allow_inf_nan=False),
-    AfterValidator(round_coordinate),
-]
-Longitude = Annotated[
-    float,
-    Field(ge=LONGITUDE_RANGE[0], le=LONGITUDE_RANGE[1], allow_inf_nan=False),
-    AfterValidator(round_coordinate),
-]
 AffectedPeople = Annotated[int, Field(ge=0, le=100_000)]
 Version = Annotated[int, Field(ge=1)]
 
@@ -63,31 +48,6 @@ class IncidentTypeResponse(IncidentTypeSummary):
     common_risks: list[str]
     details_schema_key: str | None
     is_active: bool
-
-
-# --- Ubicación ----------------------------------------------------------------------
-
-
-class LocationResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    municipality: str
-    description: str | None
-    # Ambas nulas = sin coordenadas.
-    latitude: float | None
-    longitude: float | None
-
-
-class LocationInput(_Input):
-    """Ubicación completa: en una edición sustituye a la anterior (omitir las
-    coordenadas las borra). Coordenadas: ambas o ninguna, y dentro del área de
-    la demo (lo comprueba el servicio: `coordinates_incomplete`,
-    `location_out_of_area`)."""
-
-    municipality: Municipality
-    description: LocationDescription | None = None
-    latitude: Latitude | None = None
-    longitude: Longitude | None = None
 
 
 # --- Incidentes ------------------------------------------------------------------
@@ -121,6 +81,8 @@ class IncidentSummary(BaseModel):
     version: int
     reported_at: datetime
     updated_at: datetime
+    # Recursos asignados ahora mismo.
+    active_assignments: int = 0
 
 
 class IncidentDetail(IncidentSummary):

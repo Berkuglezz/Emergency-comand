@@ -1,19 +1,21 @@
 import { useQueryClient } from "@tanstack/react-query"
 import type { TFunction } from "i18next"
-import { CircleOff, History, Pencil, Power } from "lucide-react"
+import { CircleOff, History, Link2, Pencil, Power } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useParams } from "react-router"
+import { Link, useParams } from "react-router"
 
 import { BackLink } from "@/components/ops/back-link"
 import { ConfirmDialog } from "@/components/ops/confirm-dialog"
 import { DateTimeText, DetailItem } from "@/components/ops/detail-item"
+import { EtaText } from "@/components/ops/eta-text"
 import { MutationErrorAlert } from "@/components/ops/mutation-error-alert"
 import { Panel } from "@/components/ops/panel"
 import { SimulatedPill } from "@/components/ops/simulated-pill"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { hasPermission, useSession } from "@/features/auth/hooks"
+import { CoordinatesText } from "@/features/incidents/components/location-text"
 import { useOrganizations } from "@/features/organizations/hooks"
 import { ApiError } from "@/lib/api-client"
 import { useCodeLabel } from "@/lib/code-label"
@@ -82,7 +84,7 @@ export function ResourceDetailPage() {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
           <ResourceTypeLabel type={data.type} />
           <span>{data.organization.name}</span>
-          <span>{data.municipality}</span>
+          <span>{data.base.municipality}</span>
         </div>
       </header>
 
@@ -92,6 +94,7 @@ export function ResourceDetailPage() {
           <AlertDescription>{t("resources.detail.inactiveNotice")}</AlertDescription>
         </Alert>
       )}
+      {data.current_assignment && <CurrentAssignmentNotice resource={data} />}
       {data.is_active && hasPermission(user, "resources:update_status") && (
         <StatusActions resource={data} onReload={reload} />
       )}
@@ -100,10 +103,39 @@ export function ResourceDetailPage() {
   )
 }
 
-/** Cambio de estado operativo: cualquier estado distinto del actual. */
+/** Asignación activa: el recurso está trabajando en un incidente. */
+function CurrentAssignmentNotice({ resource }: { resource: Resource }) {
+  const { t } = useTranslation()
+  const assignment = resource.current_assignment
+  if (!assignment) return null
+  return (
+    <Alert>
+      <Link2 aria-hidden />
+      <AlertDescription className="flex flex-col gap-1">
+        <p>
+          {t("resources.assignment.assignedTo")}{" "}
+          <Link
+            to={`/incidents/${assignment.incident_id}`}
+            className="font-data font-medium underline underline-offset-4"
+          >
+            {assignment.incident_code}
+          </Link>{" "}
+          · {t("resources.assignment.since")} <DateTimeText value={assignment.assigned_at} />
+          {assignment.arrived_at && <> · {t("resources.assignment.arrived")}</>}
+        </p>
+        <EtaText eta={assignment.eta} assignedAt={assignment.assigned_at} />
+        <p className="text-muted-foreground">{t("resources.assignment.statusLocked")}</p>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+/** Cambio de estado operativo: cualquier estado distinto del actual. Mientras
+ * está asignado, su estado lo gobierna la asignación (se retira desde el incidente). */
 function StatusActions({ resource, onReload }: { resource: Resource; onReload: () => void }) {
   const { t } = useTranslation()
   const change = useChangeResourceStatus(resource.id)
+  const assigned = resource.current_assignment !== null
 
   return (
     <section aria-label={t("resources.actions.label")} className="flex flex-col gap-2">
@@ -114,7 +146,7 @@ function StatusActions({ resource, onReload }: { resource: Resource; onReload: (
             <Button
               key={status}
               variant="outline"
-              disabled={change.isPending}
+              disabled={change.isPending || assigned}
               onClick={() => {
                 change.mutate({ status, version: resource.version })
               }}
@@ -233,7 +265,8 @@ function SummaryOrEdit({
             <Button
               variant="outline"
               size="sm"
-              disabled={update.isPending}
+              // Un recurso asignado no se desactiva: antes se retira desde el incidente.
+              disabled={update.isPending || resource.current_assignment !== null}
               onClick={() => {
                 if (resource.is_active) setConfirmingDeactivation(true)
                 else setActive(true)
@@ -272,7 +305,13 @@ function SummaryOrEdit({
             {resource.organization.name}
           </DetailItem>
           <DetailItem label={t("resources.fields.municipality")}>
-            {resource.municipality}
+            {resource.base.municipality}
+          </DetailItem>
+          <DetailItem label={t("resources.fields.baseDescription")}>
+            {resource.base.description ?? "—"}
+          </DetailItem>
+          <DetailItem label={t("resources.fields.baseCoordinates")}>
+            <CoordinatesText location={resource.base} />
           </DetailItem>
           <DetailItem label={t("resources.fields.statusChangedAt")}>
             <DateTimeText value={resource.status_changed_at} />
@@ -283,7 +322,7 @@ function SummaryOrEdit({
         </dl>
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <History aria-hidden className="size-3.5" />
-          {t("resources.detail.noHistory")}
+          {t("resources.detail.noStatusHistory")}
         </p>
       </div>
 

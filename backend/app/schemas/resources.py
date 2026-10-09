@@ -1,7 +1,4 @@
-"""Schemas de la API de recursos.
-
-Sin coordenadas, asignaciones ni historial: solo la ficha y el estado actual.
-"""
+"""Schemas de la API de recursos: ficha, base (`Location`) y estado actual."""
 
 import uuid
 from datetime import datetime
@@ -10,7 +7,9 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, BeforeValidator, ConfigDict, StringConstraints
 
 from app.domain.enums import ResourceCategory, ResourceStatus
-from app.schemas.incidents import Municipality, Version
+from app.domain.eta import EtaOrigin
+from app.schemas.incidents import Version
+from app.schemas.locations import LocationInput, LocationResponse
 from app.schemas.organizations import OrganizationSummary
 
 
@@ -44,7 +43,30 @@ class ResourceTypeResponse(BaseModel):
     code: str
     category: ResourceCategory
     icon: str
+    # Velocidad media para la ETA estimada.
+    average_speed_kmh: int
     is_active: bool
+
+
+class EtaResponse(BaseModel):
+    """ETA **estimada** (distancia * sinuosidad / velocidad media del tipo).
+    `distance_km` es la distancia estimada por carretera."""
+
+    minutes: int
+    distance_km: float
+    origin: EtaOrigin
+
+
+class CurrentAssignment(BaseModel):
+    """Asignación activa de un recurso."""
+
+    id: uuid.UUID
+    incident_id: uuid.UUID
+    incident_code: str
+    assigned_at: datetime
+    arrived_at: datetime | None
+    # Estimación guardada al asignar.
+    eta: EtaResponse | None
 
 
 class ResourceResponse(BaseModel):
@@ -57,7 +79,10 @@ class ResourceResponse(BaseModel):
     organization: OrganizationSummary
     status: ResourceStatus
     status_changed_at: datetime
-    municipality: str
+    # Base del recurso: origen de la ETA estimada.
+    base: LocationResponse
+    # Asignación activa (una como máximo), o nula.
+    current_assignment: CurrentAssignment | None = None
     is_active: bool
     is_simulated: bool
     version: int
@@ -77,7 +102,7 @@ class ResourceCreate(_Input):
     name: ResourceName
     type_id: uuid.UUID
     organization_id: uuid.UUID
-    municipality: Municipality
+    base: LocationInput
     # Si no se indica, el recurso se da de alta disponible.
     status: ResourceStatus | None = None
 
@@ -91,7 +116,8 @@ class ResourceUpdate(_Input):
     name: ResourceName | None = None
     type_id: uuid.UUID | None = None
     organization_id: uuid.UUID | None = None
-    municipality: Municipality | None = None
+    # Si se envía, sustituye la base completa (omitir las coordenadas las borra).
+    base: LocationInput | None = None
     is_active: bool | None = None
 
 

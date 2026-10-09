@@ -14,10 +14,10 @@ def point(latitude: float, longitude: float) -> WKTElement:
 
 
 class Location(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """Ubicación de un incidente (1:1, `incidents.location_id`).
+    """Ubicación de un incidente (`incidents.location_id`) o base de un recurso
+    (`resources.base_location_id`). Siempre 1:1: una fila nunca se comparte.
 
-    - `municipality` es obligatorio: todo incidente tiene al menos una
-      ubicación textual.
+    - `municipality` es obligatorio: siempre hay al menos una ubicación textual.
     - `geom` es opcional: NULL significa «sin coordenadas». El tipo
       `geometry(Point, 4326)` ya impide otras geometrías y otros SRID.
     - `latitude`/`longitude` se leen de `geom` (sin columnas duplicadas). Tras

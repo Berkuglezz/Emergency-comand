@@ -6,7 +6,7 @@ un access token válido. Solo health, login y refresh se declaran públicos.
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.v1 import auth, dashboard, health, incidents, organizations, resources
+from app.api.v1 import assignments, auth, dashboard, health, incidents, organizations, resources
 from app.api.v1.deps import get_current_user
 from app.schemas.errors import ErrorResponse
 
@@ -25,6 +25,8 @@ protected.include_router(auth.protected_router)
 protected.include_router(organizations.router)
 protected.include_router(incidents.types_router)
 protected.include_router(incidents.router)
+protected.include_router(assignments.incident_router)
+protected.include_router(assignments.router)
 protected.include_router(resources.types_router)
 protected.include_router(resources.router)
 protected.include_router(dashboard.router)

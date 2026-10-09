@@ -45,7 +45,7 @@ async def _create(
         "name": "Autobomba de prueba",
         "type_id": await _type_id(session, type_code),
         "organization_id": organization_id or await _org(session),
-        "municipality": "Oviedo",
+        "base": {"municipality": "Oviedo"},
         **fields,
     }
     response = await client.post(f"{API}/resources", json=body, headers=headers)
@@ -89,7 +89,7 @@ async def test_everyone_reads_and_changes_status_but_only_admin_manages(
                 "name": "x",
                 "type_id": resource["type"]["id"],
                 "organization_id": resource["organization"]["id"],
-                "municipality": "Oviedo",
+                "base": {"municipality": "Oviedo"},
             },
             headers=role_headers,
         )
@@ -135,7 +135,12 @@ async def test_create_resource(
     assert resource["type"]["code"] == "ambulance_advanced"
     assert resource["type"]["category"] == "medical"
     assert resource["organization"]["id"] == organization_id
-    assert resource["municipality"] == "Oviedo"
+    assert resource["base"] == {
+        "municipality": "Oviedo",
+        "description": None,
+        "latitude": None,
+        "longitude": None,
+    }
 
 
 async def test_create_with_initial_status(
@@ -157,7 +162,7 @@ async def test_resource_code_is_unique(
             "name": "Otra",
             "type_id": first["type"]["id"],
             "organization_id": first["organization"]["id"],
-            "municipality": "Gijón",
+            "base": {"municipality": "Gijón"},
         },
         headers=admin,
     )
@@ -176,7 +181,7 @@ async def test_invalid_resource_codes_are_rejected(
             "name": "x",
             "type_id": await _type_id(session, "fire_engine"),
             "organization_id": await _org(session),
-            "municipality": "Oviedo",
+            "base": {"municipality": "Oviedo"},
         },
         headers=headers[RoleCode.ADMIN],
     )
@@ -192,7 +197,7 @@ async def test_type_and_organization_must_exist_and_be_active(
         "name": "x",
         "type_id": await _type_id(session, "fire_engine"),
         "organization_id": await _org(session),
-        "municipality": "Oviedo",
+        "base": {"municipality": "Oviedo"},
     }
     cases = [
         ({"type_id": str(uuid.uuid4())}, "resource_type_not_found"),
@@ -297,7 +302,7 @@ async def test_update_resource(
             "name": "Autobomba renombrada",
             "type_id": await _type_id(session, "rescue_vehicle"),
             "organization_id": other_org,
-            "municipality": "Avilés",
+            "base": {"municipality": "Avilés"},
         },
         headers=admin,
     )
@@ -308,7 +313,7 @@ async def test_update_resource(
     assert body["name"] == "Autobomba renombrada"
     assert body["type"]["code"] == "rescue_vehicle"
     assert body["organization"]["id"] == other_org
-    assert body["municipality"] == "Avilés"
+    assert body["base"]["municipality"] == "Avilés"
     # Editar la ficha no toca el estado operativo.
     assert body["status"] == resource["status"]
     assert body["status_changed_at"] == resource["status_changed_at"]
@@ -326,7 +331,7 @@ async def test_update_without_changes_writes_nothing(
             "name": resource["name"],
             "type_id": resource["type"]["id"],
             "organization_id": resource["organization"]["id"],
-            "municipality": resource["municipality"],
+            "base": {"municipality": resource["base"]["municipality"]},
             "is_active": True,
         },
         {"version": 1},
@@ -435,7 +440,7 @@ async def test_filters_sorting_and_pagination(
         name="Unidad sanitaria",
         organization_id=org_a,
         type_code="ambulance_basic",
-        municipality="Gijón",
+        base={"municipality": "Gijón"},
     )
     await _create(
         client,
@@ -444,11 +449,11 @@ async def test_filters_sorting_and_pagination(
         code="A-01",
         name="Autobomba norte",
         organization_id=org_a,
-        municipality="Oviedo",
+        base={"municipality": "Oviedo"},
     )
     b = await _create(
         client, session, admin, code="B-01", name="Autobomba sur", organization_id=org_b,
-        municipality="Avilés",
+        base={"municipality": "Avilés"},
     )  # fmt: skip
     await _set_status(client, admin, c, "in_service")
     await _set_status(client, admin, b, "out_of_service")
@@ -483,4 +488,97 @@ async def test_resource_types_catalog(
     codes = [t["code"] for t in types]
     assert codes == sorted(codes)
     assert "fire_engine" in codes
-    assert set(types[0]) == {"id", "code", "category", "icon", "is_active"}
+    assert set(types[0]) == {"id", "code", "category", "icon", "average_speed_kmh", "is_active"}
+    # Velocidades medias de la ETA estimada (catálogo de la migración).
+    assert {t["code"]: t["average_speed_kmh"] for t in types} == {
+        "ambulance_advanced": 65,
+        "ambulance_basic": 60,
+        "civil_protection_unit": 50,
+        "command_vehicle": 60,
+        "fire_engine": 50,
+        "logistics_support": 45,
+        "rescue_vehicle": 55,
+    }
+
+
+# --- Base del recurso (Fase 4.1) ---------------------------------------------------
+
+
+async def test_base_with_coordinates(
+    client: AsyncClient, session: AsyncSession, headers: dict[RoleCode, Headers]
+) -> None:
+    admin = headers[RoleCode.ADMIN]
+    resource = await _create(
+        client,
+        session,
+        admin,
+        base={"municipality": "Gijón", "latitude": 43.52812349, "longitude": -5.675},
+    )
+    assert resource["base"] == {
+        "municipality": "Gijón",
+        "description": None,
+        "latitude": 43.528123,
+        "longitude": -5.675,
+    }
+
+
+@pytest.mark.parametrize(
+    ("base", "code"),
+    [
+        ({"municipality": "Oviedo", "latitude": 43.36}, "coordinates_incomplete"),
+        ({"municipality": "Oviedo", "latitude": 40.41, "longitude": -3.7}, "location_out_of_area"),
+    ],
+)
+async def test_invalid_base_coordinates_are_rejected(
+    client: AsyncClient,
+    session: AsyncSession,
+    headers: dict[RoleCode, Headers],
+    base: dict[str, Any],
+    code: str,
+) -> None:
+    body = {
+        "code": "BOM-01",
+        "name": "x",
+        "type_id": await _type_id(session, "fire_engine"),
+        "organization_id": await _org(session),
+        "base": base,
+    }
+    response = await client.post(f"{API}/resources", json=body, headers=headers[RoleCode.ADMIN])
+    assert response.status_code == 422
+    assert response.json() == {"detail": code}
+
+
+async def test_changing_only_the_base_bumps_version_once(
+    client: AsyncClient, session: AsyncSession, headers: dict[RoleCode, Headers]
+) -> None:
+    admin = headers[RoleCode.ADMIN]
+    resource = await _create(client, session, admin)
+    path = f"{API}/resources/{resource['id']}"
+
+    response = await client.patch(
+        path,
+        json={
+            "version": 1,
+            "base": {"municipality": "Oviedo", "latitude": 43.35, "longitude": -5.87},
+        },
+        headers=admin,
+    )
+    assert response.status_code == 200
+    assert response.json()["version"] == 2
+    assert response.json()["base"]["latitude"] == 43.35
+
+    # La misma base no es un cambio.
+    same = await client.patch(
+        path,
+        json={
+            "version": 2,
+            "base": {"municipality": "Oviedo", "latitude": 43.35, "longitude": -5.87},
+        },
+        headers=admin,
+    )
+    assert same.json()["version"] == 2
+
+    stale = await client.patch(
+        path, json={"version": 1, "base": {"municipality": "Gijón"}}, headers=admin
+    )
+    assert stale.status_code == 409

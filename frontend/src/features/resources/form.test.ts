@@ -16,11 +16,19 @@ const RESOURCE: Resource = {
   id: "r-1",
   code: "SIM-BOV-01",
   name: "Autobomba 1 (simulado)",
-  type: { id: "t-1", code: "fire_engine", category: "fire", icon: "Truck", is_active: true },
+  type: {
+    id: "t-1",
+    code: "fire_engine",
+    category: "fire",
+    icon: "Truck",
+    average_speed_kmh: 50,
+    is_active: true,
+  },
   organization: { id: "o-1", code: "sim-bov", name: "Bomberos (simulado)", is_simulated: true },
   status: "available",
   status_changed_at: "2026-10-07T08:00:00Z",
-  municipality: "Oviedo",
+  base: { municipality: "Oviedo", description: null, latitude: 43.352, longitude: -5.873 },
+  current_assignment: null,
   is_active: true,
   is_simulated: true,
   version: 3,
@@ -44,7 +52,7 @@ describe("formulario de recurso", () => {
       name: "Autobomba",
       type_id: "t-1",
       organization_id: "o-1",
-      municipality: "Avilés",
+      base: { municipality: "Avilés", description: null, latitude: null, longitude: null },
       status: null,
     })
   })
@@ -52,8 +60,13 @@ describe("formulario de recurso", () => {
   it("la edición envía solo lo que cambia con la versión, o nada", () => {
     const values = resourceValuesFrom(RESOURCE)
     expect(toUpdatePayload(values, RESOURCE)).toBeNull()
+    // La base se envía completa: se conservan las coordenadas actuales.
     expect(toUpdatePayload({ ...values, municipality: "Siero" }, RESOURCE)).toEqual({
-      municipality: "Siero",
+      base: { municipality: "Siero", description: null, latitude: 43.352, longitude: -5.873 },
+      version: 3,
+    })
+    expect(toUpdatePayload({ ...values, latitude: "", longitude: "" }, RESOURCE)).toEqual({
+      base: { municipality: "Oviedo", description: null, latitude: null, longitude: null },
       version: 3,
     })
   })
@@ -65,6 +78,14 @@ describe("formulario de recurso", () => {
       expect(schema.safeParse({ ...base, code }).success).toBe(false)
     }
     expect(schema.safeParse({ ...base, code: "bom-01" }).success).toBe(true)
+  })
+
+  it("valida las coordenadas de la base como en el backend", () => {
+    const schema = createResourceFormSchema(i18n.t)
+    const base = { ...resourceValuesFrom(RESOURCE) }
+    expect(schema.safeParse({ ...base, longitude: "" }).success).toBe(false)
+    expect(schema.safeParse({ ...base, latitude: "40.41", longitude: "-3.70" }).success).toBe(false)
+    expect(schema.safeParse({ ...base, latitude: "", longitude: "" }).success).toBe(true)
   })
 })
 
