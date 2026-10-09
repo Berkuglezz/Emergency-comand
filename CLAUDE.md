@@ -22,6 +22,7 @@ Emergency Command es un **prototipo demostrable** de plataforma de coordinación
 | Fase 2: incidentes, recursos y dashboard funcional | **Completada** (ver §2.3 y §11.2) |
 | Fase 3: geolocalización (PostGIS + `Location`) y mapa funcional | **Completada** (ver §2.6 y §11.3) |
 | Fase 4: asignación de recursos y ETA | **Completada** (ver §2.8 y §11.4) |
+| Etapa de rediseño del centro de mando (visual, sin funcionalidad nueva) | **Completada** (ver §2.10.1) |
 
 Trabaja **solo** en el alcance de la fase autorizada. Todo lo demás está fuera de alcance aunque parezca útil o rápido de añadir.
 
@@ -162,7 +163,7 @@ Propuesta técnica aprobada y fase cerrada el 2026-10-08. Se implementó por eta
 
 **Frontend**
 - `maplibre-gl` directo (sin `react-map-gl`), carga diferida, estilo OpenFreeMap `dark` configurable con `VITE_MAP_STYLE_URL`, atribución siempre visible, fallback sin mapa base.
-- El mapa ocupa ~55 % de la zona principal del centro de mando; la lista va debajo.
+- Disposición de la Fase 3: mapa en ~55 % de la zona principal y lista debajo. **Sustituida** por la del rediseño del centro de mando (§2.10.1).
 - Marcadores DOM accesibles y compactos: color + icono por prioridad, borde por estado; el código se muestra al seleccionar y en el tooltip, y el nombre accesible incluye código, prioridad, estado y simulado (cambio tras la revisión visual: con el código siempre visible se solapaban a escala regional). Sin popup en el centro de mando (el detalle está en el panel lateral).
 - Selección y filtros en la URL, compartidos por mapa, lista y panel. Incidentes sin coordenadas: aviso con recuento y filtro, nunca ocultos.
 
@@ -254,28 +255,44 @@ Posiciones GPS o móviles de recursos (`resource_positions`), rutas por carreter
 
 Si una tarea de Fase 4 parece requerir algo de esta lista, **pregunta antes**.
 
-### 2.10 Objetivos de diseño registrados (sin fase asignada)
+### 2.10 Objetivos de diseño, acceso y distribución registrados
 
-Registrados el 2026-10-09. **No autorizan implementar nada**: ninguno forma parte del alcance de la Fase 4. Cada uno se abordará cuando se le asigne fase o etapa y se apruebe su propuesta.
+Registrados el 2026-10-09. El rediseño (§2.10.1) está **completado**. Los otros dos objetivos (§2.10.2 y §2.10.3) **no autorizan implementar nada**: se abordarán cuando se autorice su etapa o fase y se apruebe su propuesta.
 
-#### 2.10.1 Mejora de interfaz: el mapa como elemento principal
+Idea general: **una sola aplicación web adaptable**, usada tanto en la sala de coordinación como en el portátil del coordinador, con el mapa como centro de la operación. No habrá dos aplicaciones distintas. El instalador de escritorio (§2.10.2) y el acceso remoto real (§2.10.3) son decisiones posteriores, y el rediseño no los espera.
 
-Objetivo: que el mapa sea el protagonista visual del centro de mando.
+#### 2.10.1 Etapa de rediseño del centro de mando (completada)
 
-- Con los paneles contraídos, el mapa ocupa aproximadamente el **70–80 %** del espacio de trabajo. Esto sustituirá a la disposición actual de la Fase 3 (mapa ~55 % y lista debajo, §2.6).
-- La lista de incidentes y el resumen de recursos pasan a ser **paneles secundarios compactos y contraíbles**.
-- Al seleccionar un incidente o un recurso, su detalle se muestra **sin perder el contexto del mapa**: el mapa sigue visible y no se navega a otra pantalla.
-- Se mantienen:
+Etapa de diseño e implementación visual, posterior al cierre de la Fase 4. Implementada y aprobada el 2026-10-09. Solo frontend: sin cambios de backend, datos, reglas, permisos ni dependencias. No es una fase funcional y no amplía el alcance de §2. Por petición expresa, se implementó directamente y se aprobó tras revisarla en la aplicación, sin propuesta previa.
+
+**Objetivo:** que el mapa sea el protagonista visual del centro de mando, en monitores grandes de sala y en portátiles. El layout móvil sigue fuera de alcance (§2.9).
+
+**Distribución implementada:**
+
+- **Barra superior compacta** (40 px): identidad de la aplicación, aviso de prototipo, estado de conexión y reloj.
+- **Barra lateral plegable** a una columna de iconos. Los nombres siguen siendo accesibles y aparecen como tooltip. Empieza plegada por debajo de 1536 px de ancho.
+- **Franja de indicadores** de una sola línea (`KpiTile` en variante `compact`) en lugar de tarjetas grandes.
+- **Mapa en el centro, a sangre:**
+  - Sin cabecera ni pie.
+  - Recuento, «Datos simulados» y avisos (resultados truncados, incidentes sin coordenadas, seleccionado sin posición, error) superpuestos arriba a la izquierda.
+  - Leyenda plegable abajo a la izquierda, plegada por defecto.
+  - «Ajustar a incidentes» y «Centrar en Asturias» como botones de icono abajo a la derecha; el zoom de MapLibre, arriba a la derecha.
+- **Dos columnas plegables a los lados del mapa** (`Dock`), no superpuestas: al plegarlas, el mapa recupera de verdad el espacio.
+  - **Izquierda:** incidentes activos en filas compactas con prioridad, código, estado, título, municipio, recursos asignados y hora. Toda la fila selecciona, y la seleccionada se distingue con fondo y borde lateral.
+  - **Derecha («Detalle y recursos»):** incidente seleccionado, con resumen y acciones de estado (cerrar y cancelar con su confirmación); recursos asignados, con asignar, reasignar, «en el lugar» y retirar; últimos eventos; y resumen de recursos por estado. Son los mismos componentes y permisos que la ficha completa.
+  - Plegada, cada columna queda en un carril estrecho con su botón para mostrarla.
+- **Selección:** seleccionar un incidente (en el mapa o en la lista) despliega el detalle si estaba plegado. Si al redimensionarse el mapa la selección queda fuera de la vista, el mapa la vuelve a centrar. Los recursos no se seleccionan en el mapa: los asignados se ven en el detalle, con enlace a su ficha.
+- **Proporciones:**
+  - Con las columnas plegadas, el mapa ocupa en torno al 90 % del ancho de trabajo.
+  - Desplegadas, las columnas miden 288–384 px (izquierda) y 320–416 px (derecha), según el ancho de pantalla.
+  - La página no se desplaza; cada columna tiene su propio scroll. Por debajo de 1024 px las columnas se apilan para no romperse, sin que eso sea un diseño móvil.
+- **Estado de plegado:** preferencia local de cada navegador (`localStorage`, claves `ec.layout.*`, con try/catch). No va en la URL. La selección y los filtros siguen en la URL, compartidos por el mapa, la lista y el panel.
+- **Se mantienen:**
   - el diseño oscuro y los tokens de §7;
-  - la legibilidad y la accesibilidad (teclado, foco, nombres accesibles, `prefers-reduced-motion`);
-  - la sincronización mapa ↔ lista ↔ ficha por URL.
-- **Límites:**
-  - Es un cambio de distribución, no de funcionalidad.
-  - No añade rutas, GPS, capas nuevas ni nada fuera de la fase aprobada en ese momento. Las prohibiciones de §2.7 y §2.9 siguen vigentes.
-- **Procedimiento:**
-  1. Revisar la interfaz actual.
-  2. Proponer una distribución concreta: zonas, tamaños, comportamiento al contraer y expandir los paneles, y dónde se muestra la ficha.
-  3. Esperar la aprobación **antes** de tocar código.
+  - la accesibilidad: teclado, foco, nombres accesibles y `aria-expanded` en los botones de plegado;
+  - las transiciones de 150 ms, desactivadas con `prefers-reduced-motion`.
+
+**Límites que siguen vigentes:** sin rutas, GPS, capas nuevas, tiempo real ni nada de §2.7 y §2.9. El rediseño no depende de Tauri, Electron ni del instalador (§2.10.2).
 
 #### 2.10.2 Decisión futura de distribución: programa de escritorio
 
@@ -290,6 +307,21 @@ Objetivo: no cerrar la puerta a distribuir la aplicación como programa de escri
   - no se modifican la arquitectura del backend (§4) ni la base de datos.
 - Lo único que pide hoy este objetivo es no introducir en el frontend nada que impida empaquetarlo más adelante. Si una decisión pudiera afectar a ese empaquetado, se señala y se pregunta.
 - La elección de tecnología y la forma de empaquetar el backend y la base de datos son decisiones de §3 pendientes, que requerirán una propuesta escrita y una confirmación explícita.
+
+#### 2.10.3 Objetivo futuro: acceso remoto seguro
+
+Objetivo: que, si algún día se usa fuera de la red de la organización, solo puedan entrar las personas autorizadas. Poder acceder desde cualquier lugar no significa que cualquiera pueda entrar.
+
+- **Salvedad de alcance:** hoy el proyecto es un **prototipo de demostración** que «no es un sistema real» (§1). Convertirlo en un sistema para coordinadores reales sería un cambio de naturaleza del proyecto, no solo de despliegue. Exigiría:
+  1. revisar y reescribir el alcance de §1, con confirmación explícita;
+  2. abordar las medidas de seguridad y despliegue pendientes.
+- **Medidas pendientes** (no se implementan ahora):
+  - límite de intentos de login (§2.5);
+  - imágenes Docker de producción (§2.5);
+  - despliegue seguro del backend;
+  - comunicaciones protegidas con HTTPS, con la cookie de refresh `Secure` activada;
+  - control de quién puede acceder, sobre la autenticación y el RBAC existentes.
+- Hasta entonces, la aplicación sigue pensada para ejecutarse localmente con datos de demostración.
 
 ---
 

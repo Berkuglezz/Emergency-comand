@@ -1,6 +1,6 @@
 # Arquitectura de Emergency Command
 
-Estado: **Fase 4** (incidentes, recursos y centro de mando con datos reales, ubicaciones con PostGIS, mapa funcional, y asignación de recursos con ETA estimada). Este documento describe lo que **está implementado**. Lo que pertenece a fases posteriores se indica expresamente como tal, y la [sección 15](#15-implementado-y-pendiente) separa con claridad lo que funciona de lo que solo está preparado.
+Estado: **Fase 4** (incidentes, recursos y centro de mando con datos reales, ubicaciones con PostGIS, mapa funcional, y asignación de recursos con ETA estimada), más el **rediseño visual del centro de mando** con el mapa como protagonista. Este documento describe lo que **está implementado**. Lo que pertenece a fases posteriores se indica expresamente como tal, y la [sección 15](#15-implementado-y-pendiente) separa con claridad lo que funciona de lo que solo está preparado.
 
 Las reglas persistentes del proyecto (alcance, decisiones confirmadas, sistema de diseño) están en [`CLAUDE.md`](../CLAUDE.md). Este documento no las sustituye: explica cómo están implementadas.
 
@@ -510,7 +510,8 @@ React 19, Vite 8 y TypeScript 6 en modo estricto. Además:
 ```
 src/
 ├─ app/                  router, providers, query client, layout y rutas genéricas
-│  ├─ layout/            AppShell, Sidebar (navegación por permisos), TopBar (conexión y reloj)
+│  ├─ layout/            AppShell, Sidebar (navegación por permisos, plegable a iconos),
+│  │                     TopBar (identidad, aviso de demo, conexión y reloj)
 │  ├─ routes/            ProtectedRoute, RequirePermission, 404, 403, error, carga
 │  └─ dev/design-system/ catálogo de desarrollo (solo con import.meta.env.DEV)
 ├─ components/ui/        componentes de shadcn/ui (código de terceros, cambios mínimos)
@@ -518,14 +519,15 @@ src/
 ├─ features/
 │  ├─ assignments/       asignación de recursos: api, hooks, panel y diálogo de asignación
 │  ├─ auth/              sesión, login, permisos
-│  ├─ command-center/    resumen del dashboard, filtros compartidos y paneles (mapa incluido)
+│  ├─ command-center/    resumen del dashboard, filtros compartidos, paneles (mapa incluido)
+│  │                     y columnas plegables (Dock)
 │  ├─ incidents/         api, hooks, types, filters, form, presentation, components
 │  ├─ resources/         api, hooks, types, filters, form, presentation, components
 │  ├─ map/               MapLibre: configuración, mapas diferidos (lazy) y marcadores
 │  ├─ organizations/     listado de organizaciones
 │  └─ system/            health
 ├─ lib/                  api-client, query-keys, query-string, navigation, code-label,
-│                        form-a11y, format, utils
+│                        form-a11y, format, use-persisted-toggle, utils
 ├─ i18n/                 config + locales/es.json
 ├─ styles/               tokens.css (fuente de verdad del diseño) + index.css
 ├─ types/api.ts          generado desde OpenAPI (pnpm gen:api), no se edita a mano
@@ -539,7 +541,7 @@ Cada módulo de `features/` sigue el mismo reparto: `types.ts` (alias de los tip
 | Ruta | Permiso | Contenido |
 |---|---|---|
 | `/login` | público | Inicio de sesión |
-| `/` | sesión | **Centro de mando:** KPIs, **mapa** de incidentes activos (~55 % de la columna principal), incidentes activos con filtros, panel lateral del incidente seleccionado (resumen, coordenadas y últimos 5 eventos) y resumen de recursos por estado |
+| `/` | sesión | **Centro de mando:** franja de KPIs, **mapa** de incidentes activos como zona principal, columna plegable de incidentes activos con filtros y columna plegable de detalle (incidente seleccionado con acciones de estado, **recursos asignados** con sus acciones, últimos 5 eventos y resumen de recursos por estado). Ver «Disposición del centro de mando» |
 | `/incidents` | `incidents:read` | Listado con filtros (incluido «Coordenadas»), orden y paginación |
 | `/incidents/new` | `incidents:create` | Alta con validación, coordenadas opcionales («Elegir en el mapa») y sección fija de `details` según el tipo |
 | `/incidents/:id` | `incidents:read` | Detalle con minimapa, acciones de estado, edición, **recursos asignados** (asignar, en el lugar, retirar, reasignar), padre/hijos, historial y notas |
@@ -550,6 +552,22 @@ Cada módulo de `features/` sigue el mismo reparto: `types.ts` (alias de los tip
 | `/dev/design-system` | solo desarrollo | Catálogo del sistema de diseño; no existe en producción |
 
 Las páginas se cargan bajo demanda (`lazy`), así que el bundle inicial solo contiene el router, la sesión y el layout.
+
+**Disposición del centro de mando** (rediseño posterior a la Fase 4, `CLAUDE.md` §2.10.1), pensada para monitores grandes de sala y para portátiles:
+
+- **Barras de la aplicación:**
+  - Barra superior de 40 px con identidad, aviso de demo, conexión y reloj.
+  - Barra lateral plegable a iconos, con nombres accesibles y tooltip. Empieza plegada por debajo de 1536 px.
+- **Indicadores:** franja de una línea con `KpiTile` compacto.
+- **Mapa:** a sangre en el centro, sin cabecera ni pie. Recuento, avisos y leyenda van superpuestos en las esquinas (ver 10.7).
+- **Columnas plegables (`Dock`) a los lados del mapa, no superpuestas:** al plegar una, el mapa recupera el espacio; plegada, queda un carril con su botón (`aria-expanded`). Desplegadas miden:
+  - izquierda: 288 px (`lg`), 320 px (`xl`) y 384 px (`2xl`);
+  - derecha: 320 px, 352 px y 416 px.
+- **Columna izquierda:** incidentes activos en filas compactas (prioridad, código, estado, título, municipio, recursos asignados y hora). Toda la fila selecciona; la seleccionada lleva fondo y borde lateral.
+- **Columna derecha:** incidente seleccionado (resumen y `IncidentStatusActions`), `AssignmentsPanel` (asignar, reasignar, «en el lugar», retirar), últimos eventos y resumen de recursos. Son los mismos componentes y comprobaciones de permisos que la ficha completa.
+- **Selección:** seleccionar un incidente despliega la columna derecha si estaba plegada.
+- **Desplazamiento:** la página no se desplaza; cada columna tiene su propio scroll. Por debajo de 1024 px las columnas se apilan (no es un diseño móvil).
+- **Plegado:** es una preferencia local de cada navegador (`lib/use-persisted-toggle.ts`, `localStorage` con claves `ec.layout.*` y try/catch). No es estado compartible y no va en la URL. Las transiciones duran 150 ms y se desactivan con `prefers-reduced-motion`.
 
 **Comportamientos comunes:**
 
@@ -607,16 +625,17 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 | Estado de recurso | `available` → ok · `in_service` → info · `out_of_service` → warning · recurso desactivado → inactive |
 | Dato simulado | info, con icono de matraz y el texto «Simulado» |
 
-**Componentes de `components/ops/`:** `Panel` (estados de carga, vacío y error), `PriorityBadge`, `StatusPill`, `SimulatedPill`, `KpiTile`, `ConfirmDialog` (admite contenido adicional, como un motivo), `MutationErrorAlert` (errores de escritura y 409), `FilterSelect`, `Pagination`, `BackLink`, `DetailItem`/`DateTimeText`, `FormField`, `IncidentMarker` (marcador del mapa), `ResourceMarker` (bases de los recursos asignados) y `EtaText` (ETA siempre «estimado»).
+**Componentes de `components/ops/`:** `Panel` (estados de carga, vacío y error; `flush` para listas sin relleno), `PriorityBadge`, `StatusPill`, `SimulatedPill`, `KpiTile` (tarjeta o variante `compact` de una línea), `ConfirmDialog` (admite contenido adicional, como un motivo), `MutationErrorAlert` (errores de escritura y 409), `FilterSelect`, `Pagination`, `BackLink`, `DetailItem`/`DateTimeText`, `FormField`, `IncidentMarker` (marcador del mapa), `ResourceMarker` (bases de los recursos asignados) y `EtaText` (ETA siempre «estimado»).
 
 **Catálogo:** `/dev/design-system` muestra los tokens y los componentes base en sus estados. Vite elimina esa ruta, su código y sus textos del build de producción.
 
 ### 10.7 Mapa
 
-- **MapLibre GL JS + OpenFreeMap `dark`**, configurable con `VITE_MAP_STYLE_URL` (vacío = OpenFreeMap). Mapa plano, sin rotación ni inclinación. Encuadre inicial en Asturias, con «Centrar en Asturias» y «Ajustar a incidentes».
+- **MapLibre GL JS + OpenFreeMap `dark`**, configurable con `VITE_MAP_STYLE_URL` (vacío = OpenFreeMap). Mapa plano, sin rotación ni inclinación. Encuadre inicial en Asturias. En el centro de mando, el zoom de MapLibre va arriba a la derecha y «Ajustar a incidentes» y «Centrar en Asturias» son botones de icono (con nombre accesible y tooltip) abajo a la derecha, sobre la atribución.
 - **Carga diferida:** solo `features/map/use-maplibre.ts` y `map-parts.tsx` importan `maplibre-gl`, y se cargan dentro de componentes `lazy` (`features/map/lazy.ts`). El login y el resto de pantallas no descargan la librería. El worker de MapLibre 6 se publica como fichero propio (`?url` + `setWorkerUrl`).
-- **Marcadores DOM** (`IncidentMarker`): botones accesibles, compactos para no solaparse a escala regional. Icono y color de prioridad, borde según el estado (discontinuo = sin intervenir, continuo = en intervención, con check = controlado). El código aparece al seleccionarlo y en el tooltip (ratón o foco); el nombre accesible incluye código, prioridad, estado y «Simulado». El crítico pulsa, salvo con `prefers-reduced-motion`. Una leyenda plegable explica la codificación.
-- **Mapa ↔ lista ↔ panel:** la selección (`?incident=`) y los filtros de prioridad y estado viven en la URL y los comparten el mapa, la lista y el panel lateral. Seleccionar en la lista centra el mapa si el incidente no está a la vista, sin cambiar el zoom y sin animación con movimiento reducido. En el centro de mando no hay popup: el detalle está en el panel lateral.
+- **Marcadores DOM** (`IncidentMarker`): botones accesibles, compactos para no solaparse a escala regional. Icono y color de prioridad, borde según el estado (discontinuo = sin intervenir, continuo = en intervención, con check = controlado). El código aparece al seleccionarlo y en el tooltip (ratón o foco); el nombre accesible incluye código, prioridad, estado y «Simulado». El crítico pulsa, salvo con `prefers-reduced-motion`. Una leyenda superpuesta abajo a la izquierda, plegada por defecto, explica la codificación.
+- **Mapa ↔ lista ↔ panel:** la selección (`?incident=`) y los filtros de prioridad y estado viven en la URL y los comparten el mapa, la lista y el panel lateral. Seleccionar en la lista centra el mapa si el incidente no está a la vista, sin cambiar el zoom y sin animación con movimiento reducido. Lo mismo ocurre si el mapa cambia de tamaño (por ejemplo, al plegar o desplegar una columna) y la selección queda fuera de la vista. En el centro de mando no hay popup: el detalle está en el panel lateral.
+- **Avisos superpuestos (centro de mando):** arriba a la izquierda, recuento de incidentes en el mapa, «Datos simulados», resultados truncados y error de carga con «Reintentar».
 - **Incidentes sin coordenadas:** aviso con recuento y enlace al listado filtrado; indicador «Sin coordenadas» en listas, panel y ficha; aviso en el mapa si el seleccionado no tiene posición.
 - **Fallos:** sin respuesta del proveedor de teselas, el mapa avisa «Cartografía no disponible» y sigue mostrando las posiciones sobre un fondo liso. Sin WebGL2, el mapa avisa y el resto del centro de mando funciona igual.
 - **Atribución obligatoria** (OpenFreeMap, OpenMapTiles y OpenStreetMap) siempre visible, aunque falle el estilo. Los textos de los controles de MapLibre están traducidos.
@@ -654,7 +673,7 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 | | Herramientas | Qué cubren |
 |---|---|---|
 | Backend (425 tests) | pytest, ruff, mypy (estricto) | **Fase 1:** configuración, redacción de logs, errores, seguridad (Argon2, JWT), permisos, metadatos de modelos (sin columnas geográficas, fechas con zona), health, login, `/me`, refresh y reutilización, logout, 403 por rol y protección por defecto. **Fase 2:** reglas puras (transiciones, `allowed_transitions`, `details`, recursos), modelos y trigger de solo inserción, eventos en la misma transacción, API de incidentes y recursos (permisos, filtros, orden, paginación, 409, ediciones sin cambios, notas en cerrados, padre/hijo), KPIs del dashboard y seed (marcado, coherencia del historial, idempotencia, no deshace cambios, no consume códigos). **Fase 3:** reglas geográficas puras (rangos, pares, área de la demo, `bbox`), migración con datos (traslado, downgrade y negativa a deshacer `location_changed`) sobre una base de datos propia, PostGIS (tipo, SRID, índice GiST, 1:1), coordenadas en la API (redondeo, `NaN`, códigos de error), `location_changed` y `version`, filtro `has_coordinates`, `GET /incidents/map` (filtros, `bbox`, orden GeoJSON, truncado, 401/403), 422 sin `input`, **coordenadas fuera de los logs** y seed con coordenadas. **Fase 4:** ETA (Haversine, sinuosidad, redondeo, sin coordenadas), reglas de asignación y transiciones automáticas, migraciones con datos y negativa a deshacer asignaciones, API de asignaciones (efectos, errores, varios recursos, llegada, retirada con cada motivo, reasignación atómica, cierre con retirada, bloqueos, permisos, candidatos por ETA sin preselección, ETA guardada que no cambia), **concurrencia real** (dos asignaciones simultáneas: una gana; cierre y reasignación simultáneos terminan de forma coherente y sin interbloqueos; un interbloqueo real de PostgreSQL se traduce a `409 concurrent_update`), índice único parcial, coordenadas de bases fuera de los logs y seed coherente |
-| Frontend (105 tests) | Vitest, Testing Library, ESLint, `tsc` | Cliente API, carga de i18n, lógica pura de filtros y formularios, y flujos completos contra un backend falso en memoria que imita el contrato real: login, rutas y navegación por rol, listados con filtros en la URL, detalle e historial, cambios de estado con confirmación, 409 con recarga, edición, notas, altas con validación, desactivación, centro de mando (KPIs, selección, resumen de recursos) y «Volver» con filtros. **Fase 3**, con un doble de `maplibre-gl` (jsdom no tiene WebGL): marcadores, selección mapa ↔ lista ↔ panel, centrado con y sin movimiento reducido, filtros compartidos, encuadre, incidentes sin coordenadas, fallo del mapa base y sin WebGL2, filtro del listado, minimapa, «Elegir en el mapa», validación de coordenadas e historial de `location_changed`. **Fase 4:** candidatos por ETA sin preselección, asignación, retirada con motivo obligatorio, llegada del operador, reasignación confirmada, cierre que enumera los recursos, ficha de recurso asignado bloqueada, panel lateral, indicador y bases (agrupadas) en el mapa, y aviso de `concurrent_update` |
+| Frontend (108 tests) | Vitest, Testing Library, ESLint, `tsc` | Cliente API, carga de i18n, lógica pura de filtros y formularios, y flujos completos contra un backend falso en memoria que imita el contrato real: login, rutas y navegación por rol, listados con filtros en la URL, detalle e historial, cambios de estado con confirmación, 409 con recarga, edición, notas, altas con validación, desactivación, centro de mando (KPIs, selección, resumen de recursos) y «Volver» con filtros. **Fase 3**, con un doble de `maplibre-gl` (jsdom no tiene WebGL): marcadores, selección mapa ↔ lista ↔ panel, centrado con y sin movimiento reducido, filtros compartidos, encuadre, incidentes sin coordenadas, fallo del mapa base y sin WebGL2, filtro del listado, minimapa, «Elegir en el mapa», validación de coordenadas e historial de `location_changed`. **Fase 4:** candidatos por ETA sin preselección, asignación, retirada con motivo obligatorio, llegada del operador, reasignación confirmada, cierre que enumera los recursos, ficha de recurso asignado bloqueada, panel lateral, indicador y bases (agrupadas) en el mapa, y aviso de `concurrent_update`. **Rediseño:** acciones de estado y de recursos en el panel lateral (con los permisos del operador), plegado de columnas con persistencia y reapertura al seleccionar, recentrado al redimensionar el mapa y barra lateral plegada sin perder los nombres accesibles |
 
 - Los tests del backend usan una base de datos propia (`<POSTGRES_DB>_test`), recreada y migrada desde cero en cada ejecución; cada test corre en una transacción que se deshace. Los del frontend no necesitan backend.
 - **Verificación de extremo a extremo** (manual, no versionada): Edge en modo headless controlado por CDP contra el stack de Docker con el seed. Se hace **en solo lectura** sobre la base de desarrollo, porque el historial es de solo inserción y cada escritura consumiría códigos `INC-`; las escrituras están cubiertas por los tests.
@@ -702,6 +721,8 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 | `resources_assigned` solo automático | El estado refleja hechos (hay recursos asignados), no una decisión aparte |
 | Retirada automática al cerrar o cancelar | Ningún recurso queda bloqueado en un incidente finalizado |
 | Varios eventos de una operación separados 1 µs | El timeline los lee en el orden en que ocurrieron |
+| Columnas del centro de mando al lado del mapa, no superpuestas | Al plegarlas, el mapa recupera de verdad el espacio y ningún panel tapa marcadores |
+| Plegado de paneles en `localStorage`, no en la URL | Es una comodidad de cada puesto (sala o portátil), no un estado que se comparta; ahí no se guardan tokens ni datos |
 | Orden global de bloqueos (incidentes → recursos → asignaciones) | Evita interbloqueos entre cerrar un incidente y reasignar uno de sus recursos a la vez |
 | Interbloqueo o fallo de serialización de PostgreSQL → `409 concurrent_update` | Si aun así la base de datos aborta una transacción, no se ha guardado nada: el cliente recarga y decide; sin reintentos automáticos ni 500 genérico |
 
@@ -715,7 +736,7 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 - **Iconos de catálogo:** el frontend importa uno a uno los iconos de Lucide que usan los tipos del catálogo; un tipo nuevo con otro icono mostrará uno genérico hasta añadirlo.
 - **Filtros de un solo valor en la interfaz** para estado y prioridad (la API ya admite varios).
 - **Prueba de extremo a extremo manual**, fuera del repositorio.
-- **Layout no adaptado a móvil:** la barra lateral de la aplicación (Fase 1) no se pliega en pantallas estrechas, así que el centro de mando queda estrecho en móvil.
+- **Sin diseño móvil:** la interfaz está pensada para escritorio (monitor grande y portátil). Por debajo de 1024 px las columnas del centro de mando se apilan para no romperse, pero no hay un layout móvil (fuera de alcance).
 - **Coordenadas del seed elegidas a mano:** se han revisado sobre el mapa por muestreo, no punto a punto.
 - **Chunk del mapa grande (~1 MB):** MapLibre se carga en diferido, solo en las pantallas con mapa.
 
@@ -723,14 +744,14 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 
 ## 15. Implementado y pendiente
 
-### Implementado y funcional (Fases 1 a 4)
+### Implementado y funcional (Fases 1 a 4 y rediseño del centro de mando)
 
 - **Infraestructura:** monorepo, Docker Compose con `db`, `backend` y `frontend`, `.env.example` documentado.
 - **Autenticación y RBAC:** login, refresh con rotación, logout, `/me`, permisos por rol en el backend y navegación y acciones filtradas en el frontend.
 - **Incidentes:** catálogo de tipos, alta, consulta, edición, ciclo de vida con transiciones validadas, cierre y cancelación con confirmación, incidente padre de un nivel, `details` validados por tipo, concurrencia con `version`.
 - **Historial de incidentes:** `IncidentEvent` de solo inserción, timeline en la interfaz y notas.
 - **Recursos:** catálogo de tipos, alta, consulta, edición, estado operativo y desactivación.
-- **Centro de mando:** KPIs, incidentes activos con filtros, panel lateral del incidente seleccionado y resumen de recursos, con datos reales.
+- **Centro de mando:** mapa como zona principal, franja de KPIs, columnas plegables con los incidentes activos (con filtros) y con el detalle del incidente seleccionado (acciones de estado, recursos asignados con sus acciones y últimos eventos) y el resumen de recursos, con datos reales.
 - **Ubicaciones y mapa:** `Location` con PostGIS (`Point` 4326, índice GiST), coordenadas validadas, `location_changed`, `GET /incidents/map` (GeoJSON y `bbox`), mapa del centro de mando con MapLibre y OpenFreeMap, selección mapa ↔ lista ↔ panel, minimapa en la ficha y selección de posición en el formulario.
 - **Asignación de recursos y ETA:** bases de recursos, velocidades por tipo, `ResourceAssignment`, candidatos por ETA estimada (sin preselección), asignar, «en el lugar», retirar con motivo, reasignar, retirada al cerrar, `resources_assigned` automático, eventos en el historial y bases de los asignados en el mapa.
 - **Seed simulado de Asturias:** organizaciones, usuarios, recursos (con bases), incidentes (con coordenadas aproximadas), asignaciones e historial, todo marcado como simulado.
