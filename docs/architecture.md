@@ -108,23 +108,23 @@ Todos bajo `/api/v1`. «Autenticado» exige un access token válido; los permiso
 | `GET /incident-types` | `incidents:read` | Catálogo de tipos de incidente |
 | `GET /incidents` | `incidents:read` | Listado paginado. Filtros: `status`, `priority` (repetibles), `type`, `active` (por defecto solo activos), `q` (código o título), `parent_id`, `has_coordinates`. Orden: `priority`, `-reported_at`, `reported_at`, `-updated_at` |
 | `GET /incidents/map` | `incidents:read` | Incidentes con coordenadas como `FeatureCollection` GeoJSON ([sección 4.7](#47-ubicación-y-mapa)). Filtros: `status`, `priority`, `active`, `bbox`. **No sustituye al listado** |
-| `POST /incidents` | `incidents:create` | Alta. Empieza en `received`; sin prioridad, usa la del tipo |
+| `POST /incidents` | `incidents:create` (+ `incidents:update` para indicar la prioridad o el incidente padre) | Alta. Empieza en `received`; sin prioridad, usa la del tipo. Sin `incidents:update`, indicar una prioridad o un padre responde 403 `field_not_permitted` y no se crea nada |
 | `GET /incidents/{id}` | `incidents:read` | Detalle con padre, hijos y `allowed_transitions` |
-| `PATCH /incidents/{id}` | `incidents:update` | Edición parcial con `version` obligatoria |
-| `POST /incidents/{id}/status` | `incidents:update` (+ `incidents:close` para cerrar o cancelar) | Cambio de estado con `version` y motivo opcional |
+| `PATCH /incidents/{id}` | `incidents:update_operational` (+ `incidents:update` para campos no operativos) | Edición parcial con `version` obligatoria. Con solo la edición operativa, enviar prioridad, título o padre rechaza la petición entera: 403 `field_not_permitted`, sin cambios ni eventos |
+| `POST /incidents/{id}/status` | `incidents:change_status` (+ `incidents:close` para cerrar o cancelar) | Cambio de estado con `version` y motivo opcional |
 | `GET /incidents/{id}/events` | `incidents:read` | Historial del incidente en orden cronológico |
-| `POST /incidents/{id}/notes` | `incidents:update` | Nota en el historial (también en incidentes cerrados o cancelados) |
+| `POST /incidents/{id}/notes` | `incidents:annotate` | Nota en el historial (también en incidentes cerrados o cancelados) |
 | `GET /resource-types` | `resources:read` | Catálogo de tipos de recurso |
 | `GET /resources` | `resources:read` | Listado paginado con la asignación actual de cada recurso. Filtros: `status`, `type`, `organization_id`, `municipality` (de la base), `active`, `q`. Orden: `code`, `status`, `-status_changed_at` |
 | `POST /resources` | `resources:manage` | Alta de un recurso |
 | `GET /resources/{id}` | `resources:read` | Ficha del recurso |
 | `PATCH /resources/{id}` | `resources:manage` | Edición de la ficha, incluida la (des)activación, con `version` |
-| `POST /resources/{id}/status` | `resources:update_status` | Cambio de estado operativo con `version` |
+| `POST /resources/{id}/status` | `resources:update_status` + ámbito de escritura | Cambio de estado operativo con `version`. Recurso de una organización fuera del ámbito: 403 `organization_out_of_scope` (antes que la versión) |
 | `GET /incidents/{id}/assignments` | `incidents:read` | Asignaciones del incidente: activas primero y después el historial ([sección 5.1](#51-asignación-de-recursos-y-eta)) |
-| `GET /incidents/{id}/assignment-candidates` | `incidents:read` + `resources:read` | Recursos asignables ordenados por ETA estimada, con los tipos sugeridos marcados. Filtros: `type`, `organization_id`, `include_assigned`. **Sin preselección** |
-| `POST /incidents/{id}/assignments` | `assignments:manage` | `{resource_id, version, reassign?}` → detalle del incidente |
-| `POST /assignments/{id}/arrival` | `assignments:update` | Marca «en el lugar» (`{version}` del incidente) |
-| `POST /assignments/{id}/release` | `assignments:manage` | Retira con motivo (`{version, reason}`) |
+| `GET /incidents/{id}/assignment-candidates` | `incidents:read` + `resources:read` | Recursos asignables **del ámbito de escritura del usuario** (filtrado en la consulta), ordenados por ETA estimada, con los tipos sugeridos marcados. Filtros: `type`, `organization_id`, `include_assigned`. **Sin preselección** |
+| `POST /incidents/{id}/assignments` | `assignments:manage` + ámbito de escritura sobre el recurso | `{resource_id, version, reassign?}` → detalle del incidente. Recurso fuera del ámbito (también al reasignar): 403 `organization_out_of_scope` |
+| `POST /assignments/{id}/arrival` | `assignments:update` + ámbito de escritura sobre el recurso | Marca «en el lugar» (`{version}` del incidente). Recurso fuera del ámbito: 403 `organization_out_of_scope` |
+| `POST /assignments/{id}/release` | `assignments:manage` + ámbito de escritura sobre el recurso | Retira con motivo (`{version, reason}`). Recurso fuera del ámbito: 403 `organization_out_of_scope` |
 | `GET /dashboard/summary` | `incidents:read` + `resources:read` | KPIs del centro de mando ([sección 7](#7-resumen-del-centro-de-mando)) |
 
 **Protegido por defecto:** `app/api/v1/router.py` registra los endpoints públicos uno a uno y cuelga el resto de un router que exige un access token válido. Un test recorre el esquema OpenAPI y comprueba que cualquier ruta no pública responde 401 sin token.
@@ -392,7 +392,7 @@ Un solo nivel: un incidente con padre no puede tener hijos, y un incidente con h
   | Datos | Cantidad | Marcado |
   |---|---|---|
   | Organizaciones | 4 (coordinación Asturias, bomberos Oviedo, sanitario Gijón, protección civil Avilés) | `is_simulated`, código `sim-…`, «(simulado)» en el nombre |
-  | Usuarios | 3, uno por rol | email del dominio reservado `.test` |
+  | Usuarios | 5: admin y coordinador (coordinación Asturias) y tres operadores, de bomberos Oviedo, de sanitario Gijón y sin organización, para mostrar el ámbito organizativo | email del dominio reservado `.test` |
   | Recursos | 18 (11 disponibles, 5 en servicio, 2 fuera de servicio) | `is_simulated`, código `SIM-…`, «(simulado)» en el nombre |
   | Incidentes | 12 en Oviedo, Gijón, Avilés, Siero, Mieres y Aller: todas las prioridades y estados alcanzables, 2 cerrados, 1 cancelado y un temporal con dos incidentes hijos | `is_simulated`, «(simulado)» en el título, ubicación genérica «(ubicación simulada)». Coordenadas aproximadas (3 decimales, ≈ 100 m) en zonas genéricas, nunca sobre instalaciones de emergencias; dos incidentes activos sin coordenadas a propósito |
   | Eventos del historial | 38, coherentes con el estado final de cada incidente | `is_simulated`, actor nulo («Sistema») |
@@ -475,9 +475,12 @@ refresh(A) de nuevo:
   | Permiso | `admin` | `coordinator` | `operator` |
   |---|:-:|:-:|:-:|
   | `incidents:read` | ✅ | ✅ | ✅ |
-  | `incidents:create` | ✅ | ✅ | ❌ |
-  | `incidents:update` (editar, cambiar estado, notas) | ✅ | ✅ | ❌ |
-  | `incidents:close` (cerrar o cancelar) | ✅ | ✅ | ❌ |
+  | `incidents:create` | ✅ | ✅ | ✅ |
+  | `incidents:update` (edición completa de la ficha) | ✅ | ✅ | ❌ |
+  | `incidents:update_operational` (descripción, personas afectadas, ubicación y `details`) | ✅ | ✅ | ✅ |
+  | `incidents:annotate` (notas) | ✅ | ✅ | ✅ |
+  | `incidents:change_status` (estado del incidente) | ✅ | ✅ | ❌ |
+  | `incidents:close` (cerrar o cancelar; además de `incidents:change_status`) | ✅ | ✅ | ❌ |
   | `resources:read` | ✅ | ✅ | ✅ |
   | `resources:update_status` | ✅ | ✅ | ✅ |
   | `resources:manage` (alta, edición, desactivación) | ✅ | ❌ | ❌ |
@@ -485,7 +488,43 @@ refresh(A) de nuevo:
   | `assignments:manage` (asignar, retirar, reasignar) | ✅ | ✅ | ❌ |
   | `assignments:update` (marcar «en el lugar») | ✅ | ✅ | ✅ |
 
-- **Comprobación:** con la dependencia `require_permission(Permission.X)` en el router. Cerrar o cancelar se comprueba en el servicio, porque depende del estado de destino. Sin permiso responde `403 {"detail":"permission_denied"}`.
+- **Matriz aprobada** en `CLAUDE.md` §2.11 (etapa de roles, permisos y ámbito organizativo, en curso). El estado del incidente y el estado operativo de un recurso son permisos distintos: el operador no cambia el primero, pero sí el segundo.
+- **Comprobación:** con la dependencia `require_permission(Permission.X)` en el router. Lo que depende del cuerpo de la petición se comprueba en el servicio: cerrar o cancelar (según el estado de destino), los campos no operativos de una edición (`OPERATIONAL_FIELDS` en `domain/incident_rules.py`; cuenta lo **enviado**, no lo que cambiaría, y se comprueba antes de leer o modificar nada) y la prioridad inicial y el incidente padre de un alta (`CREATE_FIELDS_REQUIRING_FULL_EDIT`; sin `incidents:update`, se aplican la prioridad del tipo y ningún padre). Sin permiso responde `403 {"detail":"permission_denied"}`. Un test de inventario (`tests/integration/test_permission_matrix.py`) declara los permisos de **cada ruta** de la API, la llama con los tres roles y falla si aparece una ruta sin declarar.
+- **Ámbito organizativo (en construcción, `CLAUDE.md` §2.11).** `domain/access_scope.py` define `AccessScope`, inmutable, con un ámbito de lectura y otro de escritura («todas» o un conjunto de organizaciones), y `scope_for(rol, organización)` con una regla explícita por rol:
+
+  | Rol | Lectura | Escritura |
+  |---|---|---|
+  | `admin`, `coordinator` | todas | todas |
+  | `operator` con organización | todas | solo la suya |
+  | `operator` sin organización | todas | ninguna |
+
+  Un rol sin regla falla de forma cerrada (`PermissionDeniedError`, 403). La dependencia `get_access_scope` lo calcula para el usuario autenticado, sin consultas adicionales, y `OutOfScopeError` se traduce a `403 {"detail":"organization_out_of_scope"}`.
+
+  **Dónde se aplica hoy:**
+  - Cambio de estado operativo de un recurso.
+  - «En el lugar».
+  - Asignar, retirar y reasignar.
+  - Candidatos de asignación: el repositorio filtra con `OrganizationAccess.as_filter()`, así que pedir otra organización con `organization_id` no salta el ámbito.
+
+  Los servicios llaman a una única comprobación, `AccessScope.require_write(organización del recurso)`, nada más cargar el recurso y antes de modificar nada ni registrar eventos. Un recurso de otra organización da **403**, no 404: el operador puede verlo (D4) y el 404 se reserva para las lecturas fuera de ámbito (D5).
+
+  **Lectura (R.6):**
+  - Con D4, todos los roles leen todas las organizaciones, así que el ámbito de lectura **no restringe hoy a nadie**.
+  - El patrón está aplicado a la ficha de un recurso (`AccessScope.require_read`, que fuera del ámbito responde 404 `resource_not_found`, como si no existiera, según D5) y al listado de recursos (filtro en la consulta, para que el total y la paginación cuadren).
+  - Lecturas identificadas pero todavía sin filtro, hasta que exista un ámbito de lectura limitado y se decida cómo mostrarlas:
+    - los recursos incluidos en las asignaciones de un incidente;
+    - los recuentos de recursos del dashboard;
+    - las bases en el mapa;
+    - los códigos de recurso en el historial.
+  - Los incidentes no tienen organización (D2): no se filtran.
+
+  Hoy admin y coordinador alcanzan a todas las organizaciones (D1), así que en la práctica el ámbito solo restringe al operador. Los tests prueban además un ámbito restringido sustituyendo la dependencia, como preparación para una autorización por organización.
+
+  **Excepción consciente:** cerrar o cancelar un incidente retira **todos** sus recursos asignados, sean de la organización que sean. Es una consecuencia de una acción sobre el incidente (`incidents:close`), no una escritura directa sobre esos recursos.
+- **Ámbito en la interfaz (R.7).**
+  - `/auth/me` incluye `scope`: `read` y `write`, cada uno como `{all_organizations, organization_ids}`. Lo calcula `scope_for` en el backend; la petición no tiene parámetros que lo alteren.
+  - En el frontend, `canWriteOrganization(user, organizationId)` (`features/auth/hooks.ts`) es la única comprobación de ámbito. Con ella se muestran u ocultan los botones de estado de un recurso (fuera del ámbito, una línea explica por qué), «En el lugar» y «Retirar».
+  - El alta del operador no ofrece incidente padre ni prioridad (D10 y D11).
 - **En el frontend es solo experiencia de usuario.** `/auth/me` devuelve la lista de permisos del usuario, y con ella el frontend filtra la navegación, oculta las acciones no permitidas, evita peticiones que sabe que darían 403 (por ejemplo, la lista de organizaciones para el operador) y muestra «Acceso no permitido» en las rutas sin permiso. El backend vuelve a comprobarlo en cada petición.
 
 ---

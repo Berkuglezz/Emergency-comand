@@ -23,6 +23,7 @@ Emergency Command es un **prototipo demostrable** de plataforma de coordinación
 | Fase 3: geolocalización (PostGIS + `Location`) y mapa funcional | **Completada** (ver §2.6 y §11.3) |
 | Fase 4: asignación de recursos y ETA | **Completada** (ver §2.8 y §11.4) |
 | Etapa de rediseño del centro de mando (visual, sin funcionalidad nueva) | **Completada** (ver §2.10.1) |
+| Etapa de roles, permisos y ámbito organizativo | **Completada** (ver §2.11 y §11.5) |
 
 Trabaja **solo** en el alcance de la fase autorizada. Todo lo demás está fuera de alcance aunque parezca útil o rápido de añadir.
 
@@ -257,7 +258,7 @@ Si una tarea de Fase 4 parece requerir algo de esta lista, **pregunta antes**.
 
 ### 2.10 Objetivos de diseño, acceso y distribución registrados
 
-Registrados el 2026-10-09. El rediseño (§2.10.1) está **completado**. Los otros dos objetivos (§2.10.2 y §2.10.3) **no autorizan implementar nada**: se abordarán cuando se autorice su etapa o fase y se apruebe su propuesta.
+Registrados el 2026-10-09. El rediseño (§2.10.1) está **completado**. Los demás objetivos (§2.10.2 escritorio, §2.10.3 acceso remoto y §2.10.4 mapa operativo) **no autorizan implementar nada**: se abordarán cuando se autorice su etapa o fase y se apruebe su propuesta.
 
 Idea general: **una sola aplicación web adaptable**, usada tanto en la sala de coordinación como en el portátil del coordinador, con el mapa como centro de la operación. No habrá dos aplicaciones distintas. El instalador de escritorio (§2.10.2) y el acceso remoto real (§2.10.3) son decisiones posteriores, y el rediseño no los espera.
 
@@ -322,6 +323,166 @@ Objetivo: que, si algún día se usa fuera de la red de la organización, solo p
   - comunicaciones protegidas con HTTPS, con la cookie de refresh `Secure` activada;
   - control de quién puede acceder, sobre la autenticación y el RBAC existentes.
 - Hasta entonces, la aplicación sigue pensada para ejecutarse localmente con datos de demostración.
+
+#### 2.10.4 Objetivo futuro: mapa operativo (dibujo y capas)
+
+Registrado el 2026-10-09. **No autoriza implementar nada.** Requiere su propia fase o etapa, con propuesta técnica aprobada; el orden respecto a la Fase 5 está por decidir.
+
+**Objetivo:** que el mapa ayude a coordinar y no solo muestre posiciones.
+
+- **Dibujar y editar áreas:** perímetros de incendios y otras zonas afectadas.
+- **Marcar elementos operativos:** cortes de carreteras, zonas de exclusión, zonas seguras y puntos de interés.
+- **Asociar cada geometría a un incidente**, con tipo (de un catálogo, no libre), autor, fecha, estado y auditoría. Su evolución queda en el historial, sin sobrescribir sin rastro.
+- **Mostrar y ocultar capas operativas** en el mapa.
+- **Distinguir lo dibujado de lo oficial:** la información dibujada en el mapa no se confunde con datos oficiales o validados.
+
+**Límites ya conocidos (a confirmar en la propuesta):**
+
+- Hoy quedan fuera de alcance las capas nuevas y las geometrías que no sean puntos (§2.7 y §2.9); este objetivo los abriría de forma controlada.
+- Una zona de exclusión sería **informativa**: sin alertas automáticas de entrada (eso exige posiciones reales, Fase 5) ni rutas que la eviten.
+- Compartirlo en tiempo real llega con la Fase 5.
+- Los permisos de dibujo deben encajar con la matriz y el ámbito de §2.11.
+- Cualquier librería de dibujo para MapLibre (p. ej. Terra Draw) es una dependencia nueva que requiere aprobación.
+- Las ayudas de cálculo (p. ej. la superficie de un perímetro con PostGIS) se etiquetan siempre como «estimado».
+
+### 2.11 Etapa de roles, permisos y ámbito organizativo (completada)
+
+Registrada y **aprobada el 2026-10-09**, con las decisiones D1–D11 de §2.11.5. Se implementa paso a paso (R.1–R.8): cada paso se verifica y se resume antes del siguiente. Objetivo: una central de coordinación única que trabaja con varias organizaciones (bomberos, sanitarios, policía…), separando **qué puede hacer** un usuario (rol → permisos) de **sobre qué organizaciones** puede hacerlo (ámbito). Todo se aplica en el backend; el frontend solo adapta la interfaz.
+
+**Estado:** R.1–R.8 implementados y aprobados; D1–D11 aplicadas. Etapa **cerrada el 2026-10-09** (criterios en §11.5).
+
+- **Escritura:** el ámbito se aplica al cambio de estado operativo de un recurso y a «en el lugar» (R.4), y a asignar, retirar y reasignar, con los candidatos filtrados (R.5).
+- **Lectura (R.6):** el patrón (`require_read` → 404 y filtro en la consulta) está aplicado a la ficha y al listado de recursos. Con D4 no restringe a ningún rol.
+- **Lecturas identificadas pero sin filtro**, porque con D4 no hace falta y su presentación con ámbitos limitados está por decidir: los recursos dentro de las asignaciones de un incidente, los recuentos del dashboard, las bases en el mapa y los códigos de recurso en el historial.
+
+- **Interfaz (R.7):**
+  - `/me` incluye `scope` (lectura y escritura: «todas» o una lista de organizaciones), calculado por el backend.
+  - `canWriteOrganization` decide qué se muestra: botones de estado de un recurso, «En el lugar» y «Retirar» solo dentro del ámbito.
+  - El alta del operador no tiene selector de incidente padre (D11).
+  - `organization_out_of_scope` tiene su mensaje.
+  - El backend falso de los tests aplica las mismas reglas.
+  - Es solo ayuda visual: el backend sigue rechazando lo no autorizado.
+
+- **Seed y cierre (R.8):** dos operadores de demo más (sanitario Gijón y sin organización); README con lo que puede hacer cada rol y el ámbito; verificación desde una copia limpia y contra la API en marcha.
+
+Cierre confirmado el 2026-10-09.
+
+#### 2.11.1 Situación actual (revisada en código)
+
+**Permisos** (`app/core/permissions.py`, comprobados con `require_permission` en cada endpoint):
+
+| Permiso | Operador | Coordinador | Admin | Endpoints |
+|---|:-:|:-:|:-:|---|
+| `incidents:read` | ✅ | ✅ | ✅ | listado, mapa, detalle, historial, asignaciones del incidente |
+| `incidents:create` | ❌ | ✅ | ✅ | alta de incidente |
+| `incidents:update` | ❌ | ✅ | ✅ | edición completa (`PATCH`), cambio de estado y **notas** |
+| `incidents:close` | ❌ | ✅ | ✅ | cerrar o cancelar (comprobado en el servicio) |
+| `resources:read` | ✅ | ✅ | ✅ | listado y ficha de recursos; candidatos y dashboard (junto con `incidents:read`) |
+| `resources:update_status` | ✅ | ✅ | ✅ | cambio de estado operativo de un recurso |
+| `resources:manage` | ❌ | ❌ | ✅ | alta, edición y desactivación de recursos |
+| `organizations:read` | ❌ | ✅ | ✅ | listado de organizaciones |
+| `assignments:manage` | ❌ | ✅ | ✅ | asignar, retirar, reasignar |
+| `assignments:update` | ✅ | ✅ | ✅ | marcar «en el lugar» |
+
+**Relaciones organizativas que existen:**
+
+- `users.organization_id`: **una** organización por usuario, **nullable**.
+- `resources.organization_id`: obligatoria; cada recurso pertenece a una organización.
+- Asignaciones: sin columna propia; su organización es la del recurso.
+
+**Lo que no existe:**
+
+- **Ningún ámbito en la autorización.** Hoy cualquier operador cambia el estado de un recurso de cualquier organización, o marca su llegada, con solo conocer su identificador.
+- **Ninguna relación incidente ↔ organización.** Los incidentes son de la central.
+- **Ninguna forma de autorizar a un usuario sobre varias organizaciones.**
+- **Ninguna gestión de usuarios ni de organizaciones** (ni API ni pantallas).
+
+**Seed actual:**
+
+- Admin y coordinador pertenecen al «Centro de Coordinación Demo»; el operador, a «Bomberos Demo Oviedo».
+- Hay 18 recursos repartidos entre las 4 organizaciones.
+
+**Diferencias con el objetivo:**
+
+- El operador no puede crear incidentes ni añadir notas, porque las notas cuelgan de `incidents:update`.
+- No existe la edición «solo de campos operativos».
+- No hay ámbito organizativo.
+
+#### 2.11.2 Matriz de permisos propuesta
+
+Los permisos siguen en código (decisión de la Fase 1). Las novedades son `incidents:annotate`, `incidents:update_operational`, que se separa de la edición completa, y el **ámbito** de cada acción sobre recursos.
+
+| Permiso | Operador | Coordinador | Admin | Ámbito |
+|---|:-:|:-:|:-:|---|
+| `incidents:read` | ✅ | ✅ | ✅ | Toda la central (ver D2) |
+| `incidents:create` | ✅ **(nuevo para operador)** | ✅ | ✅ | — |
+| `incidents:annotate` (notas, **nuevo**) | ✅ | ✅ | ✅ | — |
+| `incidents:update_operational` (**nuevo**: solo campos operativos, ver D6) | ✅ | ✅ | ✅ | — |
+| `incidents:update` (edición completa: prioridad, tipo, título, padre…) | ❌ | ✅ | ✅ | — |
+| `incidents:change_status` (estados no finales; hoy dentro de `incidents:update`) | ❌ (ver D7) | ✅ | ✅ | — |
+| `incidents:close` | ❌ | ✅ | ✅ | — |
+| `resources:read` | ✅ | ✅ | ✅ | Ámbito de lectura (ver D4) |
+| `resources:update_status` | ✅ | ✅ | ✅ | **Ámbito de escritura** |
+| `resources:manage` | ❌ | ❌ | ✅ | Global (admin) |
+| `assignments:manage` | ❌ | ✅ | ✅ | **Ámbito de escritura** sobre el recurso |
+| `assignments:update` («en el lugar») | ✅ | ✅ | ✅ | **Ámbito de escritura** sobre el recurso (ver D9) |
+| `organizations:read` | ❌ | ✅ | ✅ | — |
+| Gestión de usuarios, roles y organizaciones | ❌ | ❌ | futuro | **Fuera de esta etapa** (etapa de seguridad, §2.10.3) |
+
+#### 2.11.3 Solución técnica propuesta para el ámbito
+
+- **`AccessScope` en el dominio** (`app/domain/access_scope.py`, puro y testeable):
+  - Contiene `read_organizations` y `write_organizations`, cada uno como «todas» o como un conjunto de identificadores.
+  - Lo calcula un único servicio a partir del usuario y lo inyecta una dependencia (`get_access_scope`). Ningún endpoint decide el ámbito por su cuenta.
+- **Origen del ámbito en esta etapa** (sin tablas nuevas, ver D1):
+  - Admin y coordinador: todas las organizaciones.
+  - Operador: solo su `organization_id`.
+  - Usuario sin organización: ámbito vacío, que deniega cualquier escritura sobre recursos.
+  - Si más adelante hace falta autorizar a un coordinador sobre organizaciones concretas, solo cambia el origen de `AccessScope` (tabla de concesiones); los endpoints no se tocan.
+- **Aplicación en los servicios, no en los routers:**
+  - Cada escritura sobre un recurso comprueba la organización del recurso **después de cargarlo**, con el mismo bloqueo `FOR UPDATE` de la Fase 4. Si queda fuera del ámbito, lanza la excepción de dominio `OutOfScope` → 403 `organization_out_of_scope`. No se escribe nada ni se registra evento.
+  - Lecturas fuera del ámbito de lectura: 404 `resource_not_found`, para no revelar que existe (ver D5).
+- **Listados filtrados en el repositorio:** recursos, candidatos de asignación y resumen del dashboard se filtran con el ámbito de lectura, de modo que los recuentos no filtran datos ajenos.
+- **Reasignación:** exige ámbito de escritura sobre el recurso; los incidentes de origen y de destino no tienen ámbito (D2).
+- **`/auth/me`** devuelve el ámbito: lista de identificadores o «todas». El frontend lo usa para deshabilitar acciones; el backend lo vuelve a comprobar siempre.
+- **Edición operativa:** el servicio compara los campos cambiados con los permitidos por `incidents:update_operational`. Si hay campos no permitidos, responde 403 `field_not_permitted` y no aplica ningún cambio parcial.
+- **Sin cambios de esquema en la opción recomendada.** Solo cambian `permissions.py`, los servicios, los repositorios, los esquemas de `/me` y errores, el frontend y el seed (usuarios de demo adicionales).
+
+#### 2.11.4 Pasos propuestos (cada uno se verifica, se resume y espera aprobación)
+
+| Paso | Contenido | Criterios de aceptación y tests |
+|---|---|---|
+| R.1 Matriz en código | Permisos nuevos (`incidents:annotate`, `incidents:update_operational`, `incidents:change_status`) y matriz de §2.11.2; las notas pasan a `incidents:annotate` | Test de inventario: **cada ruta** de OpenAPI tiene declarados sus permisos y se llama con los 3 roles (sin el permiso → 403 `permission_denied`; con él → la autorización no la bloquea), y una ruta nueva sin declarar hace fallar el test. El operador crea incidentes y añade notas; recibe 403 en edición completa, cambio de estado, cierre y asignación |
+| R.2 Edición operativa | Regla pura de campos permitidos por permiso; `PATCH` con comprobación por campo | Unit tests de la regla. El operador cambia campos operativos (200, `version` +1, evento) y recibe 403 `field_not_permitted` al enviar prioridad, título o padre (aunque sea el valor actual), **sin cambio parcial ni evento**; el tipo no lo cambia nadie (422) |
+| R.3 `AccessScope` | Dominio puro, dependencia, cálculo por rol y organización | Unit tests: admin y coordinador → todas; operador → la suya; sin organización → vacío |
+| R.4 Ámbito en escrituras del operador | Cambio de estado de recurso y «en el lugar» | Con el **identificador de un recurso ajeno**: 403 `organization_out_of_scope`, recurso, asignación e historial intactos. Con uno propio: 2xx. Prueba con dos operadores de organizaciones distintas |
+| R.5 Ámbito en asignaciones | Asignar, retirar y reasignar con ámbito; candidatos filtrados | Coordinador con ámbito total asigna recursos de varias organizaciones al mismo incidente. Test con un ámbito restringido construido en el test (preparación para D1): 403 y sin efectos |
+| R.6 Ámbito de lectura | Según D4: listado, ficha, candidatos, dashboard, bases en el mapa | Fuera del ámbito: 404 en la ficha, ausencia en listados y recuentos coherentes. Sin fugas en mensajes de error ni en logs |
+| R.7 `/me` y frontend | Ámbito en `/me`; acciones deshabilitadas fuera del ámbito; alta y notas para el operador; formulario de edición operativa | `pnpm gen:api`; tests de frontend por rol y por organización. El backend falso imita las mismas reglas |
+| R.8 Seed, documentación y cierre | Usuarios de demo adicionales (p. ej. un operador sanitario); README («qué puede hacer cada rol»), `docs/architecture.md`, clon limpio | Seed idempotente; criterios de esta tabla cumplidos; tests, `ruff`, `mypy`, `alembic check`, ESLint, tipos y build en verde |
+
+#### 2.11.5 Decisiones (aprobadas el 2026-10-09 según las recomendaciones)
+
+- **D1. Origen de la autorización multiorganización del coordinador.** No existe ninguna relación usuario ↔ varias organizaciones.
+  - Recomendado: en esta etapa, el ámbito se deriva del rol (coordinador y admin = todas), detrás de `AccessScope`.
+  - Alternativa: tabla de concesiones `user_organization_access`. Exige migración y, para gestionarla, la etapa de seguridad (no hay gestión de usuarios).
+- **D2. Ámbito de los incidentes.** Los incidentes no tienen organización.
+  - Recomendado: todos los usuarios de la central ven todos los incidentes.
+  - Limitarlos exigiría una relación nueva (organizaciones participantes o jurisdicción) que hoy no existe y no se inventará sin aprobación.
+- **D3. Usuarios sin organización** (`organization_id` es nullable). Recomendado: ámbito de escritura vacío para operadores; admin y coordinador no dependen de ella.
+- **D4. Ámbito de lectura del operador.**
+  - Recomendado: ve **todos** los recursos, porque la imagen operativa común lo necesita (mapa, asignados de otras organizaciones), y solo **modifica** los de su organización.
+  - Alternativa: restringir también la lectura (paso R.6 completo).
+- **D5. Respuesta fuera de ámbito.** Recomendado: 404 en lecturas (no revela existencia) y 403 `organization_out_of_scope` en escrituras sobre recursos visibles.
+- **D6. Campos operativos del operador.** Propuesta: descripción, personas afectadas, ubicación (municipio, descripción y coordenadas) y `details`. Quedan fuera prioridad, tipo, título y padre. Requiere tu confirmación.
+- **D7. ¿Puede el operador cambiar el estado** en pasos no finales (p. ej. `received` → `assessing`)? Recomendado: no, según el objetivo, que reserva prioridad y estado al coordinador.
+  - **Precisión aprobada:** el operador **no** cambia el estado **del incidente**, pero **sí** actualiza el **estado operativo de los recursos de su organización** (`resources:update_status`, con ámbito de escritura). No se confunden los estados del incidente con los del recurso.
+- **D8. Visibilidad de `/organizations` para el operador.** Recomendado: sigue en 403; su organización ya llega en `/me`.
+- **D9. «En el lugar» de recursos ajenos.** Recomendado: el operador solo marca la llegada de recursos de su organización; el coordinador, de cualquiera.
+- **D10. Prioridad inicial** (decidida al aprobar R.1). Quien no tiene `incidents:update` (el operador) crea los incidentes con la **prioridad por defecto del tipo** (`incident_types.default_priority`, obligatoria y única por tipo) y no puede elegirla: indicarla en el alta responde 403 `field_not_permitted`. Coordinador y admin pueden fijarla. Sin reglas de clasificación ni IA.
+- **D11. Incidente padre en el alta (decidida: opción b).** Quien no tiene `incidents:update` (el operador) no puede indicar `parent_incident_id` al crear un incidente: un valor distinto de `null` responde 403 `field_not_permitted` y no se crea nada. Coordinador y admin sí pueden. Origen: la revisión final de R.2 detectó que el alta lo permitía.
+
+**Fuera de esta etapa:** gestión de usuarios, roles y organizaciones; roles en base de datos o configurables; límite de intentos de login; auditoría (`AuditLog`); jurisdicción de incidentes; cualquier funcionalidad de §2.9.
 
 ---
 
@@ -654,6 +815,23 @@ La Fase 4 se considera terminada cuando (todos cumplidos y verificados al cierre
 - [x] Ningún elemento de §2.9 implementado.
 - [x] Tests (425 backend, 105 frontend), `ruff`, `mypy`, `alembic check`, ESLint, type-check y build pasan; verificado desde un clon limpio.
 - [x] README y `docs/architecture.md` actualizados.
+
+### 11.5 Etapa de roles, permisos y ámbito organizativo
+
+La etapa se considera terminada cuando (todos cumplidos y verificados al cierre, 2026-10-09):
+
+- [x] Matriz de permisos de §2.11.2 en código; cada ruta de la API declara sus permisos en un test de inventario que falla ante una ruta nueva sin declarar.
+- [x] El operador registra incidentes y añade notas; no cambia el estado del incidente, no lo cierra ni asigna, retira o reasigna recursos.
+- [x] Edición operativa: el operador solo modifica descripción, personas afectadas, ubicación y `details`; cualquier otro campo enviado responde 403 `field_not_permitted` sin cambios parciales ni eventos (D6).
+- [x] En el alta, el operador recibe la prioridad por defecto del tipo y no indica prioridad ni incidente padre (D10, D11).
+- [x] `AccessScope` con una regla explícita por rol, que falla de forma cerrada ante un rol desconocido; lo calcula el backend y `/me` lo expone.
+- [x] Ámbito de escritura aplicado en los servicios (estado operativo de recursos, «en el lugar», asignar, retirar, reasignar y candidatos), antes de modificar nada; fuera de ámbito, 403 `organization_out_of_scope`. Probado con el identificador de un recurso de otra organización y con un operador sin organización.
+- [x] D4 se mantiene: todos leen todas las organizaciones; el patrón de lectura (`require_read` → 404 y filtro en la consulta) está aplicado a la ficha y al listado de recursos.
+- [x] La interfaz refleja permisos y ámbito (acciones ocultas, motivo visible, mensajes de error) y el backend falso aplica las mismas reglas.
+- [x] Seed con operadores de dos organizaciones y uno sin organización, idempotente.
+- [x] Tests (510 backend, 122 frontend), `ruff`, `mypy`, `alembic check`, ESLint, type-check, Prettier y build pasan; verificado desde una copia limpia (325 ficheros versionables, dependencias instaladas desde cero e imágenes Docker construidas) y contra la API en marcha con los usuarios del seed (403 `organization_out_of_scope` y `field_not_permitted` donde corresponde, sin cambios en los datos).
+- [x] Sin cambios de esquema ni migraciones; sin gestión de usuarios u organizaciones, roles configurables, auditoría ni jurisdicción de incidentes.
+- [x] README, `docs/architecture.md` y esta sección actualizados.
 
 ---
 

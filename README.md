@@ -6,7 +6,7 @@ Prototipo demostrable de una plataforma de coordinación de emergencias: un cent
 
 **Estado actual: Fase 4.** Funciona:
 
-- autenticación y control de acceso por rol (RBAC);
+- autenticación, control de acceso por rol (RBAC) y **ámbito organizativo**: cada operador modifica solo los recursos de su organización, aunque consulta los de todas;
 - **incidentes:** alta, edición, ciclo de vida con cambios de estado validados, incidente padre, historial (timeline) y notas;
 - **recursos:** alta, edición, estado operativo y desactivación;
 - **centro de mando** con datos reales: indicadores, **mapa** de incidentes activos, incidentes activos, incidente seleccionado y resumen de recursos;
@@ -108,37 +108,42 @@ Los puertos publicados se configuran en `.env` (`FRONTEND_HOST_PORT`, `BACKEND_H
 
 ### Usuarios demo
 
-El seed crea un usuario por rol. Solo existen si el seed se ha ejecutado con `ENVIRONMENT=development`.
+El seed crea un usuario por rol y dos operadores más para probar el ámbito organizativo. Solo existen si el seed se ha ejecutado con `ENVIRONMENT=development`; si tu base de datos es anterior, el siguiente arranque del backend añade los que falten.
 
 | Rol | Email | Organización (simulada) |
 |---|---|---|
 | `admin` | `admin@demo.emergency-command.test` | Centro de Coordinación Demo Asturias |
 | `coordinator` | `coordinador@demo.emergency-command.test` | Centro de Coordinación Demo Asturias |
 | `operator` | `operador@demo.emergency-command.test` | Parque de Bomberos Demo Oviedo |
+| `operator` | `operador.sanitario@demo.emergency-command.test` | Servicio Sanitario Demo Gijón |
+| `operator` | `operador.sin.organizacion@demo.emergency-command.test` | Sin organización: consulta todo, pero no modifica ningún recurso |
 
-**Contraseña:** la de la variable **`DEMO_USER_PASSWORD`** de tu fichero `.env`. No se incluye en este README ni en el código. Si la cambias en `.env`, la siguiente ejecución del seed (o el siguiente arranque del backend en Docker) actualiza la de los tres usuarios.
+**Contraseña:** la de la variable **`DEMO_USER_PASSWORD`** de tu fichero `.env`. No se incluye en este README ni en el código. Si la cambias en `.env`, la siguiente ejecución del seed (o el siguiente arranque del backend en Docker) actualiza la de todos los usuarios demo.
 
-Qué puede hacer cada rol en esta fase:
+Qué puede hacer cada rol. El **rol** decide qué acciones existen; el **ámbito organizativo** decide sobre qué recursos: el admin y el coordinador, sobre los de todas las organizaciones; el operador, solo sobre los de la suya.
 
 | Acción | `admin` | `coordinator` | `operator` |
 |---|:-:|:-:|:-:|
 | Ver el centro de mando, incidentes y recursos | ✅ | ✅ | ✅ |
-| Dar de alta y editar incidentes, cambiar su estado y añadir notas | ✅ | ✅ | ❌ |
+| Dar de alta incidentes y añadir notas | ✅ | ✅ | ✅ |
+| Elegir la prioridad inicial (si no, se aplica la del tipo) o el incidente padre al dar de alta | ✅ | ✅ | ❌ |
+| Editar descripción, personas afectadas, ubicación y datos del tipo | ✅ | ✅ | ✅ |
+| Cambiar prioridad, título o incidente padre, y el estado del incidente | ✅ | ✅ | ❌ |
 | Cerrar y cancelar incidentes | ✅ | ✅ | ❌ |
-| Cambiar el estado operativo de un recurso | ✅ | ✅ | ✅ |
+| Cambiar el estado operativo de un recurso | ✅ | ✅ | ✅ solo de su organización |
 | Dar de alta, editar y desactivar recursos | ✅ | ❌ | ❌ |
 | Asignar, retirar y reasignar recursos a un incidente | ✅ | ✅ | ❌ |
-| Marcar que un recurso asignado está «en el lugar» | ✅ | ✅ | ✅ |
+| Marcar que un recurso asignado está «en el lugar» | ✅ | ✅ | ✅ solo de su organización |
 | Ver organizaciones | ✅ | ✅ | ❌ |
 
-Lo que un rol no puede hacer no aparece en la interfaz, y la API responde 403 si se intenta igualmente.
+Lo que un rol no puede hacer no aparece en la interfaz (en la ficha de un recurso de otra organización, el operador ve por qué), y la API responde 403 si se intenta igualmente (`permission_denied`, `field_not_permitted` u `organization_out_of_scope`).
 
 ### Datos simulados
 
 Todos los datos demo viven en `backend/seeds/`, son ficticios y la interfaz los marca como «Simulado»:
 
 - **4 organizaciones** de Asturias, con código `sim-…` y «(simulado)» en el nombre;
-- **3 usuarios**, uno por rol, con emails del dominio reservado `.test`, que no puede existir en internet;
+- **5 usuarios:** uno por rol, más dos operadores (uno de otra organización y otro sin organización) para probar el ámbito organizativo. Sus emails son del dominio reservado `.test`, que no puede existir en internet;
 - **18 recursos** con código `SIM-…` (bomberos, sanitarios, protección civil y apoyo logístico), cada uno con una base simulada con coordenadas aproximadas;
 - **asignaciones de ejemplo** coherentes con los estados: los 5 recursos en servicio están asignados a incidentes activos, con su ETA estimada, una llegada, una retirada por «misión cumplida» y una retirada automática al cerrar un incidente;
 - **12 incidentes** en Oviedo, Gijón, Avilés y municipios cercanos, con todas las prioridades y estados, incluidos un temporal con dos incidentes agrupados, dos cerrados y uno cancelado, cada uno con su historial;
