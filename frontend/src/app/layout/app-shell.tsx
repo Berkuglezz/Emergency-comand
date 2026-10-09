@@ -18,7 +18,9 @@ export function AppShell() {
         <Sidebar />
         <main
           className={cn(
-            "min-h-0 min-w-0 flex-1",
+            // `relative`: los textos ocultos para lectores de pantalla (`sr-only`,
+            // posición absoluta) se quedan dentro y no alargan la página.
+            "relative min-h-0 min-w-0 flex-1",
             isCommandCenter ? "overflow-auto p-2 lg:overflow-hidden" : "overflow-auto p-3"
           )}
         >

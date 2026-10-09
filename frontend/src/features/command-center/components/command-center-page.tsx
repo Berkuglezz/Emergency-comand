@@ -164,7 +164,7 @@ export function CommandCenterPage() {
           widthClassName="lg:w-80 xl:w-[22rem] 2xl:w-[26rem]"
         >
           {/* Una sola barra de desplazamiento para toda la columna. */}
-          <div className="flex min-h-0 flex-1 flex-col gap-2 *:shrink-0 lg:overflow-y-auto">
+          <div className="relative flex min-h-0 flex-1 flex-col gap-2 *:shrink-0 lg:overflow-y-auto">
             <IncidentSidePanel
               incidentId={selectedId}
               onClose={() => {

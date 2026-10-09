@@ -62,7 +62,9 @@ export function Panel({
 
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-auto",
+          // `relative`: lo posicionado dentro (p. ej. `sr-only`) se desplaza con
+          // el panel en lugar de alargar la página.
+          "relative flex min-h-0 flex-1 flex-col overflow-auto",
           // Los estados de carga, vacío y error conservan siempre el relleno.
           flush && status === "ready" ? "p-0" : "p-3"
         )}

@@ -34,6 +34,21 @@ export function Sidebar() {
         expanded ? "w-52" : "w-12"
       )}
     >
+      {/* Arriba, donde se busca: plegar o desplegar la navegación. */}
+      <div className={cn("flex border-b p-2", expanded ? "justify-end" : "justify-center")}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-expanded={expanded}
+          aria-label={expanded ? t("layout.sidebar.collapse") : t("layout.sidebar.expand")}
+          title={expanded ? t("layout.sidebar.collapse") : t("layout.sidebar.expand")}
+          onClick={() => {
+            setExpanded(!expanded)
+          }}
+        >
+          <ToggleIcon aria-hidden />
+        </Button>
+      </div>
       <nav aria-label={t("nav.label")} className="flex-1 p-2">
         <ul className="flex flex-col gap-0.5">
           {items.map(({ to, labelKey, icon: Icon }) => (
@@ -88,21 +103,6 @@ export function Sidebar() {
           </Button>
         </div>
       )}
-
-      <div className="border-t p-2">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-expanded={expanded}
-          aria-label={expanded ? t("layout.sidebar.collapse") : t("layout.sidebar.expand")}
-          title={expanded ? t("layout.sidebar.collapse") : t("layout.sidebar.expand")}
-          onClick={() => {
-            setExpanded(!expanded)
-          }}
-        >
-          <ToggleIcon aria-hidden />
-        </Button>
-      </div>
     </aside>
   )
 }
