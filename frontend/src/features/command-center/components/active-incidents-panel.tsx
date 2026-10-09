@@ -9,34 +9,34 @@ import { PRIORITY_CODES } from "@/components/ops/priority"
 import { PriorityBadge } from "@/components/ops/priority-badge"
 import { SimulatedPill } from "@/components/ops/simulated-pill"
 import { buttonVariants } from "@/components/ui/button"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { IncidentStatusPill } from "@/features/incidents/components/incident-badges"
 import { UnlocatedMark } from "@/features/incidents/components/unlocated-mark"
 import { useIncidents } from "@/features/incidents/hooks"
 import { incidentErrorMessage } from "@/features/incidents/presentation"
 import { formatDateTime, formatNumber } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
 import { ACTIVE_STATUS_CODES, parseCommandCenterFilters, toActiveQuery } from "../filters"
+import { DockToggle } from "./dock"
 
 const LIMIT = 50
 
 interface ActiveIncidentsPanelProps {
   selectedId: string | null
   onSelect: (id: string) => void
+  /** Pliega la columna que contiene el panel. */
+  onCollapse: () => void
   className?: string
 }
 
-/** Incidentes activos por prioridad, con filtros básicos y selección. */
+/**
+ * Incidentes activos por prioridad, en filas compactas para una columna
+ * lateral, con filtros básicos y selección. Toda la fila selecciona.
+ */
 export function ActiveIncidentsPanel({
   selectedId,
   onSelect,
+  onCollapse,
   className,
 }: ActiveIncidentsPanelProps) {
   const { t } = useTranslation()
@@ -72,9 +72,17 @@ export function ActiveIncidentsPanel({
           : undefined
       }
       actions={
-        <Link to="/incidents" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-          {t("commandCenter.incidents.viewAll")}
-        </Link>
+        <>
+          <Link to="/incidents" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+            {t("commandCenter.incidents.viewAll")}
+          </Link>
+          <DockToggle
+            side="left"
+            open
+            label={t("commandCenter.incidents.title")}
+            onOpenChange={onCollapse}
+          />
+        </>
       }
       status={panelStatus}
       empty={{
@@ -88,9 +96,10 @@ export function ActiveIncidentsPanel({
         description: incidentErrorMessage(incidents.error, t),
         onRetry: () => void incidents.refetch(),
       }}
+      flush
       className={className}
     >
-      <div className="mb-2 flex flex-wrap gap-2">
+      <div className="grid grid-cols-2 gap-2 border-b px-3 py-2">
         <FilterSelect
           id={`${id}-priority`}
           label={t("incidents.filters.priority")}
@@ -99,6 +108,7 @@ export function ActiveIncidentsPanel({
             setFilter("priority", value)
           }}
           options={PRIORITY_CODES.map((code) => ({ value: code, label: t(`priority.${code}`) }))}
+          className="w-full"
         />
         <FilterSelect
           id={`${id}-status`}
@@ -111,88 +121,81 @@ export function ActiveIncidentsPanel({
             value: code,
             label: t(`incidentStatus.${code}`),
           }))}
+          className="w-full"
         />
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t("incidents.list.columns.priority")}</TableHead>
-            <TableHead>{t("incidents.list.columns.code")}</TableHead>
-            <TableHead>{t("incidents.list.columns.title")}</TableHead>
-            <TableHead>{t("incidents.list.columns.status")}</TableHead>
-            <TableHead>{t("incidents.list.columns.municipality")}</TableHead>
-            <TableHead>{t("incidents.list.columns.reportedAt")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {page?.items.map((incident) => {
-            const selected = incident.id === selectedId
-            return (
-              <TableRow key={incident.id} data-state={selected ? "selected" : undefined}>
-                <TableCell>
-                  <PriorityBadge priority={incident.priority} pulse />
-                </TableCell>
-                <TableCell>
-                  {/* Selecciona sin salir del centro de mando: el resumen va al panel lateral. */}
-                  <button
-                    type="button"
-                    aria-pressed={selected}
-                    aria-label={t("commandCenter.incidents.select", { code: incident.code })}
-                    onClick={() => {
-                      onSelect(incident.id)
-                    }}
-                    className="rounded-sm font-data font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
-                  >
-                    {incident.code}
-                  </button>
-                </TableCell>
-                <TableCell className="max-w-60">
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    {incident.parent_incident_id && (
-                      <FolderTree
-                        aria-label={t("incidents.list.child")}
-                        className="size-3.5 shrink-0 text-muted-foreground"
-                      />
-                    )}
-                    <span className="truncate">{incident.title}</span>
-                    {incident.is_simulated && <SimulatedPill />}
-                    {incident.active_assignments > 0 && (
-                      <span
-                        className="inline-flex shrink-0 items-center gap-0.5 font-data text-xs text-info"
-                        title={t("commandCenter.incidents.assigned", {
-                          count: incident.active_assignments,
-                        })}
-                      >
-                        <Truck aria-hidden className="size-3.5" />
-                        <span aria-hidden>{incident.active_assignments}</span>
-                        <span className="sr-only">
-                          {t("commandCenter.incidents.assigned", {
-                            count: incident.active_assignments,
-                          })}
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
+      <ul aria-label={t("commandCenter.incidents.title")} className="flex flex-col divide-y">
+        {page?.items.map((incident) => {
+          const selected = incident.id === selectedId
+          return (
+            <li
+              key={incident.id}
+              data-state={selected ? "selected" : undefined}
+              className={cn(
+                "relative flex flex-col gap-1 border-l-2 py-1.5 pr-3 pl-2.5 hover:bg-surface-2",
+                selected ? "border-l-info bg-surface-2" : "border-l-transparent"
+              )}
+            >
+              <div className="flex min-w-0 items-center gap-1.5">
+                <PriorityBadge priority={incident.priority} pulse />
+                {/* Selecciona sin salir del centro de mando. El botón cubre toda la
+                    fila (`after:`), pero su nombre accesible sigue siendo el código. */}
+                <button
+                  type="button"
+                  aria-pressed={selected}
+                  aria-label={t("commandCenter.incidents.select", { code: incident.code })}
+                  // El botón cubre la fila: su tooltip muestra el título completo.
+                  title={incident.title}
+                  onClick={() => {
+                    onSelect(incident.id)
+                  }}
+                  className="rounded-sm font-data font-medium outline-none after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  {incident.code}
+                </button>
+                {incident.is_simulated && <SimulatedPill />}
+                <span className="ml-auto shrink-0">
                   <IncidentStatusPill status={incident.status} />
-                </TableCell>
-                <TableCell>
-                  <span className="flex items-center gap-1.5">
-                    {incident.location.municipality}
-                    {incident.location.latitude === null && <UnlocatedMark />}
+                </span>
+              </div>
+              <div className="flex min-w-0 items-center gap-1.5">
+                {incident.parent_incident_id && (
+                  <FolderTree
+                    aria-label={t("incidents.list.child")}
+                    className="size-3.5 shrink-0 text-muted-foreground"
+                  />
+                )}
+                <span className="truncate font-medium">{incident.title}</span>
+              </div>
+              <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                <span className="flex min-w-0 items-center gap-1">
+                  <span className="truncate">{incident.location.municipality}</span>
+                  {incident.location.latitude === null && <UnlocatedMark />}
+                </span>
+                {incident.active_assignments > 0 && (
+                  <span
+                    className="inline-flex shrink-0 items-center gap-0.5 font-data text-info"
+                    title={t("commandCenter.incidents.assigned", {
+                      count: incident.active_assignments,
+                    })}
+                  >
+                    <Truck aria-hidden className="size-3.5" />
+                    <span aria-hidden>{incident.active_assignments}</span>
+                    <span className="sr-only">
+                      {t("commandCenter.incidents.assigned", {
+                        count: incident.active_assignments,
+                      })}
+                    </span>
                   </span>
-                </TableCell>
-                <TableCell className="font-data text-muted-foreground">
-                  <time dateTime={incident.reported_at}>
-                    {formatDateTime(incident.reported_at)}
-                  </time>
-                </TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
+                )}
+                <time dateTime={incident.reported_at} className="ml-auto shrink-0 font-data">
+                  {formatDateTime(incident.reported_at)}
+                </time>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
     </Panel>
   )
 }

@@ -19,6 +19,8 @@ interface PanelProps {
   empty?: { icon?: LucideIcon; title?: string; description?: string }
   error?: { title?: string; description?: string; onRetry?: () => void }
   children?: ReactNode
+  /** Sin relleno en el cuerpo: para listas que llegan hasta los bordes. */
+  flush?: boolean
   className?: string
 }
 
@@ -34,6 +36,7 @@ export function Panel({
   empty,
   error,
   children,
+  flush = false,
   className,
 }: PanelProps) {
   const { t } = useTranslation()
@@ -57,7 +60,13 @@ export function Panel({
         {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto p-3">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col overflow-auto",
+          // Los estados de carga, vacío y error conservan siempre el relleno.
+          flush && status === "ready" ? "p-0" : "p-3"
+        )}
+      >
         {status === "loading" && (
           <div role="status" className="flex flex-col gap-2">
             <Skeleton className="h-row w-full" />

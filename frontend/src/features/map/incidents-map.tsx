@@ -44,12 +44,21 @@ export default function IncidentsMap({
   const [selectedLongitude, selectedLatitude] = selected?.geometry.coordinates ?? []
 
   // Seleccionar desde la lista centra el incidente si no está a la vista (sin
-  // cambiar el zoom). Con movimiento reducido, sin animación.
+  // cambiar el zoom). Con movimiento reducido, sin animación. También al
+  // redimensionar el mapa (plegar o desplegar un panel): la selección no debe
+  // quedar fuera del área visible.
   useEffect(() => {
     if (!map || selectedLongitude === undefined || selectedLatitude === undefined) return
     const position: LngLat = [selectedLongitude, selectedLatitude]
-    if (!map.getBounds().contains(position)) {
-      map.easeTo({ center: position, animate: !prefersReducedMotion() })
+    const reveal = () => {
+      if (!map.getBounds().contains(position)) {
+        map.easeTo({ center: position, animate: !prefersReducedMotion() })
+      }
+    }
+    reveal()
+    map.on("resize", reveal)
+    return () => {
+      map.off("resize", reveal)
     }
   }, [map, selectedLongitude, selectedLatitude])
 
@@ -62,11 +71,16 @@ export default function IncidentsMap({
       overlay={
         <>
           {overlay}
+          {/* Controles propios, discretos, abajo a la derecha (encima de la
+              atribución); el zoom de MapLibre queda arriba a la derecha. */}
           {map && (
-            <div className="absolute bottom-7 left-2 z-10 flex flex-col gap-1">
+            <div className="absolute right-2 bottom-7 z-10 flex flex-col gap-1">
               <Button
                 variant="outline"
-                size="sm"
+                size="icon-sm"
+                aria-label={t("map.fitIncidents")}
+                title={t("map.fitIncidents")}
+                className="bg-surface-1"
                 onClick={() => {
                   fitToPoints(map, [
                     ...features.map((feature) => feature.geometry.coordinates),
@@ -75,18 +89,19 @@ export default function IncidentsMap({
                 }}
                 disabled={features.length === 0}
               >
-                <Scan data-icon="inline-start" aria-hidden />
-                {t("map.fitIncidents")}
+                <Scan aria-hidden />
               </Button>
               <Button
                 variant="outline"
-                size="sm"
+                size="icon-sm"
+                aria-label={t("map.centerAsturias")}
+                title={t("map.centerAsturias")}
+                className="bg-surface-1"
                 onClick={() => {
                   map.fitBounds(ASTURIAS_BOUNDS, { padding: 16, animate: !prefersReducedMotion() })
                 }}
               >
-                <LocateFixed data-icon="inline-start" aria-hidden />
-                {t("map.centerAsturias")}
+                <LocateFixed aria-hidden />
               </Button>
             </div>
           )}

@@ -1,4 +1,4 @@
-import { CircleCheck, CircleDashed, CircleAlert } from "lucide-react"
+import { CircleAlert, CircleCheck, CircleDashed, FlaskConical, Siren } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -60,12 +60,25 @@ function ConnectionStatus() {
   )
 }
 
+/** Barra superior compacta: identidad, aviso de demo, conexión y reloj. */
 export function TopBar() {
   const { t } = useTranslation()
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b bg-surface-1 px-4">
-      <span className="text-xs text-muted-foreground">{t("app.demoNotice")}</span>
-      <div className="flex items-center gap-4">
+    <header className="flex h-10 shrink-0 items-center justify-between gap-4 border-b bg-surface-1 px-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex shrink-0 items-center gap-2 font-semibold">
+          <Siren aria-hidden className="size-4" />
+          {t("app.name")}
+        </span>
+        <span
+          className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"
+          title={t("app.demoNotice")}
+        >
+          <FlaskConical aria-hidden className="size-3.5 shrink-0" />
+          <span className="truncate">{t("app.demoNotice")}</span>
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-4">
         <ConnectionStatus />
         <Clock />
       </div>

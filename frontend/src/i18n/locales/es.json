@@ -57,6 +57,12 @@
     "incidents": "Incidentes",
     "resources": "Recursos"
   },
+  "layout": {
+    "sidebar": {
+      "collapse": "Plegar la navegación",
+      "expand": "Desplegar la navegación"
+    }
+  },
   "topBar": {
     "timeZone": "Hora de Madrid",
     "connection": {
@@ -111,9 +117,14 @@
       "empty": "Selecciona un incidente de la lista para ver su resumen.",
       "lastEvents": "Últimos eventos",
       "open": "Abrir ficha completa",
-      "close": "Cerrar panel",
-      "assigned_one": "Recurso asignado",
-      "assigned_other": "Recursos asignados ({{count}})"
+      "close": "Cerrar panel"
+    },
+    "dock": {
+      "detail": "Detalle y recursos",
+      "collapse": "Plegar {{panel}}",
+      "expand": "Mostrar {{panel}}",
+      "activeCount_one": "{{count}} incidente activo",
+      "activeCount_other": "{{count}} incidentes activos"
     },
     "resources": {
       "title": "Recursos",

@@ -213,7 +213,14 @@ describe("centro de mando con asignaciones", () => {
     backend.startSessionFor("operator")
     renderApp(`/?incident=${incident.id}`)
 
-    expect(await screen.findByText("Recurso asignado")).toBeInTheDocument()
+    // Panel lateral: los mismos recursos asignados y acciones que la ficha completa.
+    const panel = await assignmentsPanel()
+    expect(await within(panel).findByRole("link", { name: "SIM-CERCA" })).toBeInTheDocument()
+    expect(
+      within(panel).getByRole("button", { name: "Marcar SIM-CERCA en el lugar" })
+    ).toBeInTheDocument()
+    // El operador marca la llegada, pero no asigna ni retira.
+    expect(within(panel).queryByRole("button", { name: "Asignar recurso" })).not.toBeInTheDocument()
     expect(screen.getAllByText("1 recurso asignado").length).toBeGreaterThan(0)
     const map = await screen.findByRole("region", { name: "Mapa de incidentes activos" })
     expect(

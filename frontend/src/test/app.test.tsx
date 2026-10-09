@@ -115,6 +115,23 @@ describe("navegación por rol", () => {
     expect(backend.callsTo("/organizations")).toHaveLength(0)
   })
 
+  it("la navegación se pliega a iconos sin perder los nombres accesibles", async () => {
+    const { user } = renderApp("/login")
+
+    await logIn(user, "coordinator@example.test")
+    await screen.findByRole("heading", { name: "Mapa" })
+    await user.click(screen.getByRole("button", { name: "Plegar la navegación" }))
+
+    const expand = screen.getByRole("button", { name: "Desplegar la navegación" })
+    expect(expand).toHaveAttribute("aria-expanded", "false")
+    expect(within(navigation()).getByRole("link", { name: "Organizaciones" })).toHaveAttribute(
+      "title",
+      "Organizaciones"
+    )
+    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument()
+    expect(localStorage.getItem("ec.layout.sidebar")).toBe("0")
+  })
+
   it("coordinator ve Organizaciones y carga los datos del backend", async () => {
     const { user } = renderApp("/login")
 

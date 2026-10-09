@@ -390,6 +390,22 @@ export function DesignSystemPage() {
           <KpiTile label={t("designSystem.kpi.loading")} state="loading" />
           <KpiTile label={t("designSystem.kpi.error")} state="error" />
         </div>
+        <div className="flex flex-wrap gap-2">
+          <KpiTile
+            variant="compact"
+            label={t("designSystem.kpi.active")}
+            value={KPI_SAMPLES.active}
+          />
+          <KpiTile
+            variant="compact"
+            label={t("designSystem.kpi.critical")}
+            value={KPI_SAMPLES.critical}
+            tone="critical"
+          />
+          <KpiTile variant="compact" label={t("designSystem.kpi.noData")} value={null} />
+          <KpiTile variant="compact" label={t("designSystem.kpi.loading")} state="loading" />
+          <KpiTile variant="compact" label={t("designSystem.kpi.error")} state="error" />
+        </div>
       </Section>
 
       <Section title={t("designSystem.sections.panel")}>

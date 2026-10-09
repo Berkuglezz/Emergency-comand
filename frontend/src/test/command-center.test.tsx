@@ -95,13 +95,13 @@ describe("centro de mando", () => {
       `?incident=${backend.incidents.byCode("INC-000001").id}`
     )
     expect(await screen.findByText("Incidente registrado con prioridad Alta")).toBeInTheDocument()
+    // Las acciones de estado y de recursos están en el propio panel lateral.
+    expect(screen.getByRole("button", { name: "Marcar como controlado" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Recursos asignados" })).toBeInTheDocument()
 
     // Ficha completa y vuelta al centro de mando con la misma selección.
     await user.click(screen.getByRole("link", { name: "Abrir ficha completa" }))
-    expect(
-      await screen.findByRole("button", { name: "Marcar como controlado" })
-    ).toBeInTheDocument()
-    await user.click(screen.getByRole("link", { name: "Volver" }))
+    await user.click(await screen.findByRole("link", { name: "Volver" }))
     expect(await screen.findByRole("button", { name: "Cerrar panel" })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe("/")
 

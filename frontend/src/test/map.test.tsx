@@ -89,6 +89,52 @@ describe("mapa del centro de mando", () => {
     )
   })
 
+  it("los paneles laterales se pliegan y seleccionar en el mapa vuelve a mostrar el detalle", async () => {
+    seed()
+    backend.startSessionFor("operator")
+    const { user } = renderApp("/")
+    await within(await mapRegion()).findAllByRole("button", { name: /^INC-/ })
+
+    // Plegar la lista: queda un carril con el botón para volver a mostrarla.
+    await user.click(screen.getByRole("button", { name: "Plegar Incidentes activos" }))
+    expect(screen.queryByRole("heading", { name: "Incidentes activos" })).not.toBeInTheDocument()
+    const showList = screen.getByRole("button", { name: "Mostrar Incidentes activos" })
+    expect(showList).toHaveAttribute("aria-expanded", "false")
+    // La preferencia se recuerda en este navegador.
+    expect(localStorage.getItem("ec.layout.incidents")).toBe("0")
+
+    // Plegar el detalle y seleccionar en el mapa: el detalle se vuelve a abrir.
+    await user.click(screen.getByRole("button", { name: "Plegar Detalle y recursos" }))
+    expect(
+      screen.queryByRole("heading", { name: "Incidente seleccionado" })
+    ).not.toBeInTheDocument()
+    await user.click(within(await mapRegion()).getByRole("button", { name: /^INC-000001/ }))
+    expect(await screen.findByRole("heading", { name: "Incendio" })).toBeInTheDocument()
+
+    await user.click(showList)
+    expect(screen.getByRole("heading", { name: "Incidentes activos" })).toBeInTheDocument()
+  })
+
+  it("al redimensionar el mapa (plegar un panel) la selección no queda fuera de la vista", async () => {
+    seed()
+    backend.startSessionFor("operator")
+    const incendio = backend.incidents.byCode("INC-000001")
+    renderApp(`/?incident=${incendio.id}`)
+    await within(await mapRegion()).findAllByRole("button", { name: /^INC-/ })
+    const map = lastMap()
+    // El mapa, más estrecho, ya no muestra el incidente seleccionado.
+    map.visible = [
+      [-7.5, 42.0],
+      [-7.4, 42.1],
+    ]
+    const before = map.calls.filter((call) => call.method === "easeTo").length
+
+    act(() => {
+      map.fire("resize")
+    })
+    expect(map.calls.filter((call) => call.method === "easeTo").length).toBe(before + 1)
+  })
+
   it("seleccionar en la lista centra el mapa si el incidente no está a la vista", async () => {
     seed()
     backend.startSessionFor("operator")

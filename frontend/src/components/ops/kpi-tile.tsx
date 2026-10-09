@@ -17,13 +17,68 @@ interface KpiTileProps {
   /** Estado que comunica la cifra; añade icono y color. */
   tone?: Tone
   state?: KpiTileState
+  /** `compact`: una sola línea (etiqueta y cifra), para franjas de indicadores. */
+  variant?: "default" | "compact"
   className?: string
 }
 
 /** Indicador numérico compacto. Sin datos falsos: si no hay valor, lo dice. */
-export function KpiTile({ label, value, unit, tone, state = "ready", className }: KpiTileProps) {
+export function KpiTile({
+  label,
+  value,
+  unit,
+  tone,
+  state = "ready",
+  variant = "default",
+  className,
+}: KpiTileProps) {
   const { t } = useTranslation()
   const ToneIcon = tone ? TONE_ICONS[tone] : null
+
+  if (variant === "compact") {
+    return (
+      <div
+        data-state={state}
+        aria-busy={state === "loading"}
+        className={cn(
+          "flex h-8 shrink-0 items-center gap-2 rounded-md border bg-card px-2.5",
+          className
+        )}
+      >
+        <span className="text-xs whitespace-nowrap text-muted-foreground">{label}</span>
+        {state === "loading" && (
+          <span role="status" className="flex items-center">
+            <Skeleton className="h-4 w-6" />
+            <span className="sr-only">{t("common.loading")}</span>
+          </span>
+        )}
+        {state === "error" && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <TriangleAlert aria-hidden className="size-3.5" />
+            {t("ops.kpi.unavailable")}
+          </span>
+        )}
+        {state === "ready" && (
+          <span className={cn("flex items-center gap-1", tone && TONE_STYLES[tone].text)}>
+            {ToneIcon && <ToneIcon aria-hidden className="size-3.5" />}
+            {value === null || value === undefined ? (
+              <>
+                <span aria-hidden className="font-data text-muted-foreground">
+                  —
+                </span>
+                <span className="sr-only">{t("common.noData")}</span>
+              </>
+            ) : (
+              <span className="font-data text-sm font-semibold">
+                {formatNumber(value)}
+                {unit && <span className="ml-0.5 text-xs font-normal">{unit}</span>}
+              </span>
+            )}
+          </span>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div
