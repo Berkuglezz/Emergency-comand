@@ -24,6 +24,7 @@ Emergency Command es un **prototipo demostrable** de plataforma de coordinación
 | Fase 4: asignación de recursos y ETA | **Completada** (ver §2.8 y §11.4) |
 | Etapa de rediseño del centro de mando (visual, sin funcionalidad nueva) | **Completada** (ver §2.10.1) |
 | Etapa de roles, permisos y ámbito organizativo | **Completada** (ver §2.11 y §11.5) |
+| Fase del mapa operativo (dibujo y capas), antes de la Fase 5 (D-M8) | **En curso** (ver §2.12): M.0 y M.1 completadas y aprobadas; M.2 implementada, pendiente de revisión; M.3–M.6 pendientes |
 
 Trabaja **solo** en el alcance de la fase autorizada. Todo lo demás está fuera de alcance aunque parezca útil o rápido de añadir.
 
@@ -326,7 +327,7 @@ Objetivo: que, si algún día se usa fuera de la red de la organización, solo p
 
 #### 2.10.4 Objetivo futuro: mapa operativo (dibujo y capas)
 
-Registrado el 2026-10-09. **No autoriza implementar nada.** Requiere su propia fase o etapa, con propuesta técnica aprobada; el orden respecto a la Fase 5 está por decidir.
+Registrado el 2026-10-09 y convertido después en fase aprobada: ver §2.12, que manda sobre este apartado. Se hace **antes de la Fase 5** (D-M8), por subfases con aprobación expresa. Lo que sigue es el objetivo original y se conserva como referencia.
 
 **Objetivo:** que el mapa ayude a coordinar y no solo muestre posiciones.
 
@@ -483,6 +484,67 @@ Los permisos siguen en código (decisión de la Fase 1). Las novedades son `inci
 - **D11. Incidente padre en el alta (decidida: opción b).** Quien no tiene `incidents:update` (el operador) no puede indicar `parent_incident_id` al crear un incidente: un valor distinto de `null` responde 403 `field_not_permitted` y no se crea nada. Coordinador y admin sí pueden. Origen: la revisión final de R.2 detectó que el alta lo permitía.
 
 **Fuera de esta etapa:** gestión de usuarios, roles y organizaciones; roles en base de datos o configurables; límite de intentos de login; auditoría (`AuditLog`); jurisdicción de incidentes; cualquier funcionalidad de §2.9.
+
+### 2.12 Fase del mapa operativo (en curso)
+
+Aprobada el 2026-10-09 como dirección del proyecto, **antes de la Fase 5** (D-M8). Se implementa por subfases; cada una necesita aprobación expresa. Abre de forma controlada lo que §2.7 y §2.9 excluían: **geometrías distintas de puntos y capas operativas asociadas a incidentes**. Siguen fuera: rutas, alertas automáticas, análisis de seguridad a partir de las geometrías, geofencing, tiempo real y servicios de pago.
+
+**Decisiones aprobadas:**
+
+| | Decisión |
+|---|---|
+| D-M1 | Terra Draw, evaluado en M.0: se fijarán `terra-draw` **1.35.0** y `terra-draw-maplibre-gl-adapter` **1.4.1** cuando llegue la fase de frontend. Cargado en diferido, solo para dibujar y editar |
+| D-M2 | Solo coordinador y admin crean, editan y retiran geometrías (`map_features:manage`); todos los que leen incidentes las consultan |
+| D-M3 | Cada cambio registra en el historial del incidente la geometría anterior y la nueva |
+| D-M4 | Retirar, nunca borrar |
+| D-M5 | Todo lo dibujado es «Dibujado · no validado»; no es un dato oficial |
+| D-M6 | Al principio, solo las geometrías del incidente seleccionado; sin vista global |
+| D-M7 | Cada geometría tiene su propia `version`; editarla no cambia la del incidente |
+| D-M8 | Esta fase va antes de la Fase 5 |
+
+**Subfases:**
+
+| Subfase | Contenido | Estado |
+|---|---|---|
+| M.0 | Prueba técnica de Terra Draw fuera del repositorio | Hecha y aprobada |
+| M.1 | Backend del perímetro: `incident_map_features`, validación, API, historial y migración | **Completada y aprobada (2026-10-10)** |
+| M.2 | Lectura en el mapa: capas GeoJSON propias, lista en el panel y leyenda | **Implementada (2026-10-10), pendiente de revisión** |
+| M.3 | Dibujar y editar el perímetro en la interfaz (Terra Draw) | Pendiente |
+| M.4 | Líneas (cortes de carretera), puntos de interés, zonas de exclusión y zonas seguras | Pendiente |
+| M.5 | Control de capas y vista global | Pendiente |
+| M.6 | Documentación y cierre | Pendiente |
+
+**M.1, lo implementado (backend, más la corrección defensiva de la cronología):**
+
+- **Tabla `incident_map_features`:**
+  - `kind` (catálogo fijo de 6 tipos) y `status` (`active` o `retired`);
+  - `geom geometry(Geometry, 4326)` con índice GiST;
+  - etiqueta y nota;
+  - autoría (`created_by`, `updated_by`, `retired_by`), fechas, motivo de retirada, `version` e `is_simulated`;
+  - CHECK en la tabla: el tipo de geometría corresponde al `kind`, `ST_IsValid` y estado coherente con `retired_at`.
+- **La API solo acepta `perimeter`** (`map_feature_kind_not_enabled` para el resto).
+- **Validación:**
+  - en el dominio puro (`app/domain/map_features.py`): geometría vacía, tipo incorrecto, huecos (no admitidos), anillo sin cerrar, polígono degenerado o con vértices alineados, coordenadas no finitas, fuera de rango o fuera del área de la demo;
+  - **límites:** 500 vértices, 32 KiB por geometría y 64 KiB por evento; el esquema corta antes las listas de más de 1.000 posiciones;
+  - la autointersección la decide **PostGIS** (`ST_IsValid`, código `geometry_invalid_topology`).
+- **Historial:** eventos `map_feature_added`, `map_feature_updated` y `map_feature_retired` con `before`/`after`, en la misma transacción que el cambio.
+- **Concurrencia:** se bloquea el incidente y después la geometría. Con una versión obsoleta, 409 `version_conflict`.
+- **Incidente cerrado:** solo lectura (`incident_closed`).
+- **Errores y logs:** los errores no repiten la geometría recibida, y las geometrías nunca van a los logs.
+- **Migración `bdbee921361f`:** el `downgrade` se niega si hay geometrías o eventos de geometría, en lugar de perder datos.
+- **Frontend: solo la cronología, de forma defensiva.** Los tipos generados (`pnpm gen:api`) **no** se han regenerado; se actualizarán en M.2. Mientras tanto, el timeline reconoce `map_feature_*` por su código (tipo, etiqueta, campos cambiados o motivo, **nunca la geometría**), y cualquier tipo de evento desconocido se muestra de forma genérica en lugar de romper la ficha. No hay capas, lista, leyenda ni dibujo en la interfaz.
+- **Verificado al cerrar (2026-10-10):** backend 565 tests, Ruff, formato, mypy estricto, `alembic check` y una sola cabeza (`bdbee921361f`); frontend 144 tests, `tsc`, ESLint, Prettier y build.
+
+**M.2, lo implementado (solo frontend, solo lectura):**
+
+- **Tipos regenerados** con `pnpm gen:api` (backend local, sin seed): solo añade las rutas y esquemas de M.1, `map_features:manage` y los tres eventos. La cronología pasa a usar los tipos generados en lugar de reconocer `map_feature_*` por su código, sin cambiar lo que muestra; un tipo desconocido sigue sin romperla.
+- **Datos:** `features/map-features/` (`useIncidentPerimeters`) consulta `GET /incidents/{id}/map-features` del incidente seleccionado y se queda con los perímetros activos. Mapa y panel lateral comparten la consulta (clave bajo el detalle del incidente). Sin `placeholderData`: al cambiar de incidente nunca se ve el perímetro del anterior.
+- **Mapa:** capa GeoJSON propia (`features/map/perimeter-layer.tsx`): relleno tenue y **contorno discontinuo** en el color de `--status-warning`, por debajo de los marcadores. Sin clics ni popups. «Ajustar a incidentes» incluye sus vértices. Sin mapa base no se puede añadir la capa: se avisa y el perímetro sigue en el panel.
+- **Estados:** carga («Cargando perímetro…»), error con «Reintentar» (los incidentes no se ocultan), sin perímetro (nada en el mapa y aviso en el panel) e indicador «Perímetro · Dibujado · no validado» cuando hay uno.
+- **Leyenda:** «Perímetro · Dibujado · no validado», con el mismo trazo.
+- **Panel lateral:** sección «Perímetros» de solo lectura: etiqueta (o «Perímetro sin etiqueta»), «Dibujado · no validado», nota, simulado y última modificación. Sin acciones para ningún rol.
+- **Sin dependencias nuevas** (Terra Draw llega en M.3) y sin cambios en el backend.
+- **Verificado (2026-10-10):** frontend 153 tests, `tsc`, ESLint, Prettier y build; backend sin cambios (565 tests, Ruff, mypy y `alembic check`); los datos demo, idénticos antes y después.
 
 ---
 

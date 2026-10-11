@@ -50,6 +50,7 @@ const PERMISSIONS: Record<Me["role"], Me["permissions"]> = {
     "organizations:read",
     "assignments:manage",
     "assignments:update",
+    "map_features:manage",
   ],
   coordinator: [
     "incidents:read",
@@ -64,6 +65,7 @@ const PERMISSIONS: Record<Me["role"], Me["permissions"]> = {
     "organizations:read",
     "assignments:manage",
     "assignments:update",
+    "map_features:manage",
   ],
   operator: [
     "incidents:read",
@@ -114,6 +116,8 @@ export class FakeBackend {
   readonly assignments = new FakeAssignments(this.incidents, this.resources)
   /** El resumen del dashboard responde 500. */
   failDashboard = false
+  /** Mientras no se resuelva, las consultas de elementos del mapa no responden (estado de carga). */
+  holdMapFeatures: Promise<void> | null = null
 
   private readonly accessTokens = new Map<string, Me>()
   private readonly refreshTokens = new Map<string, Me>()
@@ -131,6 +135,7 @@ export class FakeBackend {
         : undefined
     this.calls.push({ method, path, authorization, query: url.searchParams, body })
     await Promise.resolve()
+    if (this.holdMapFeatures && path.endsWith("/map-features")) await this.holdMapFeatures
     return this.handle(method, path, url.searchParams, authorization, init?.body)
   })
 

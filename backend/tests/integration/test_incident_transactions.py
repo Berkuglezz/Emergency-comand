@@ -20,7 +20,7 @@ from app.core.security import hash_password
 from app.db.session import get_sessionmaker
 from app.domain.enums import IncidentEventType, IncidentStatus, RoleCode
 from app.domain.exceptions import ConflictError
-from app.models import Incident, IncidentEvent, IncidentType, Role, User
+from app.models import Incident, IncidentEvent, IncidentMapFeature, IncidentType, Role, User
 from app.repositories.incidents import IncidentRepository
 from app.repositories.users import UserRepository
 from app.schemas.incidents import (
@@ -89,6 +89,9 @@ async def committed() -> AsyncIterator[Committed]:
             incidents = select(Incident.id).where(Incident.created_by_id == user_id)
             await session.execute(
                 delete(IncidentEvent).where(IncidentEvent.incident_id.in_(incidents))
+            )
+            await session.execute(
+                delete(IncidentMapFeature).where(IncidentMapFeature.incident_id.in_(incidents))
             )
             await session.execute(delete(Incident).where(Incident.created_by_id == user_id))
             await session.execute(delete(User).where(User.id == user_id))
@@ -262,3 +265,93 @@ async def test_failed_event_rolls_back_the_creation(committed: Committed) -> Non
 
     async with maker() as session:
         assert await session.scalar(select(func.count()).where(Incident.title == title)) == 0
+
+
+async def test_failed_event_rolls_back_every_map_feature_change(
+    committed: Committed, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mapa operativo (M.1): la geometría y su evento, todo o nada."""
+    from app.domain.enums import MapFeatureKind
+    from app.schemas.map_features import (
+        MapFeatureCreate,
+        MapFeatureRetire,
+        MapFeatureUpdate,
+        PolygonInput,
+    )
+    from app.services.map_features import MapFeatureService
+
+    square = [(-5.86, 43.36), (-5.85, 43.36), (-5.85, 43.37), (-5.86, 43.37), (-5.86, 43.36)]
+    moved = [(-5.87, 43.36), (-5.85, 43.36), (-5.85, 43.38), (-5.87, 43.38), (-5.87, 43.36)]
+    maker = get_sessionmaker()
+    async with maker() as session:
+        feature = await MapFeatureService(session).create(
+            committed.incident_id,
+            MapFeatureCreate(
+                kind=MapFeatureKind.PERIMETER,
+                geometry=PolygonInput(type="Polygon", coordinates=[square]),
+            ),
+            await _actor(committed.user_id, session),
+        )
+        feature_id = feature.id
+
+    async def snapshot() -> tuple[object, ...]:
+        async with maker() as session:
+            row = await session.get(IncidentMapFeature, feature_id)
+            assert row is not None
+            events = await session.scalar(
+                select(func.count()).where(IncidentEvent.incident_id == committed.incident_id)
+            )
+            features = await session.scalar(
+                select(func.count()).where(IncidentMapFeature.incident_id == committed.incident_id)
+            )
+            return row.version, row.status, row.geojson, events, features
+
+    before = await snapshot()
+    original = IncidentRepository.add_event
+
+    def add_event(self: IncidentRepository, event: IncidentEvent) -> None:
+        original(self, event)
+        original(
+            self,
+            IncidentEvent(
+                incident_id=uuid.uuid4(), event_type=IncidentEventType.NOTE_ADDED, payload={}
+            ),
+        )
+
+    monkeypatch.setattr(IncidentRepository, "add_event", add_event)
+
+    async def create(service: MapFeatureService, actor: User) -> object:
+        return await service.create(
+            committed.incident_id,
+            MapFeatureCreate(
+                kind=MapFeatureKind.PERIMETER,
+                geometry=PolygonInput(type="Polygon", coordinates=[moved]),
+            ),
+            actor,
+        )
+
+    async def update(service: MapFeatureService, actor: User) -> object:
+        return await service.update(
+            feature_id,
+            MapFeatureUpdate(version=1, geometry=PolygonInput(type="Polygon", coordinates=[moved])),
+            actor,
+        )
+
+    async def retire(service: MapFeatureService, actor: User) -> object:
+        return await service.retire(
+            feature_id, MapFeatureRetire(version=1, reason="No debe guardarse"), actor
+        )
+
+    operations: dict[str, Callable[[MapFeatureService, User], Awaitable[object]]] = {
+        "create": create,
+        "update": update,
+        "retire": retire,
+    }
+    for name, operation in operations.items():
+        async with maker() as session:
+            with pytest.raises(IntegrityError):
+                await operation(
+                    MapFeatureService(session), await _actor(committed.user_id, session)
+                )
+        # Ni la geometría ni el evento: todo o nada.
+        assert await snapshot() == before, name

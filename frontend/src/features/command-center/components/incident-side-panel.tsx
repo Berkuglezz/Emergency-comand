@@ -20,6 +20,7 @@ import { TimelineEntry } from "@/features/incidents/components/incident-timeline
 import { CoordinatesText } from "@/features/incidents/components/location-text"
 import { useIncident, useIncidentEvents } from "@/features/incidents/hooks"
 import { incidentErrorMessage } from "@/features/incidents/presentation"
+import { PerimetersPanel } from "@/features/map-features/components/perimeters-panel"
 import { formatNumber } from "@/lib/format"
 import { returnState } from "@/lib/navigation"
 import { queryKeys } from "@/lib/query-keys"
@@ -37,9 +38,9 @@ interface IncidentSidePanelProps {
 
 /**
  * Incidente seleccionado sin salir del centro de mando: resumen, acciones de
- * estado, recursos asignados (asignar, reasignar, llegada y retirada) y
- * últimos eventos. Son los mismos componentes que la ficha completa, con las
- * mismas comprobaciones de permisos (y el backend vuelve a comprobarlo todo).
+ * estado, recursos asignados (asignar, reasignar, llegada y retirada),
+ * perímetros dibujados (solo lectura) y últimos eventos. Son los mismos
+ * componentes que la ficha completa, con las mismas comprobaciones de permisos (y el backend vuelve a comprobarlo todo).
  */
 export function IncidentSidePanel({ incidentId, onClose, onCollapse }: IncidentSidePanelProps) {
   const { t } = useTranslation()
@@ -174,6 +175,8 @@ function SelectedIncident({
       </Panel>
 
       {data && <AssignmentsPanel incident={data} onReload={reload} />}
+
+      {data && <PerimetersPanel incidentId={data.id} />}
 
       {data && (
         <Panel title={t("commandCenter.detail.lastEvents")}>

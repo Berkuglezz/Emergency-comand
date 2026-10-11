@@ -16,6 +16,8 @@ export const queryKeys = {
   incidentAssignments: (id: string) => ["incidents", "detail", id, "assignments"] as const,
   assignmentCandidates: (id: string, params: Record<string, unknown>) =>
     ["incidents", "detail", id, "candidates", params] as const,
+  /** Elementos del mapa operativo del incidente (CLAUDE.md §2.12), bajo su detalle. */
+  incidentMapFeatures: (id: string) => ["incidents", "detail", id, "map-features"] as const,
   resourceTypes: ["resource-types"] as const,
   /** Prefijo común: invalidarlo refresca listados y fichas de recursos. */
   resources: ["resources"] as const,

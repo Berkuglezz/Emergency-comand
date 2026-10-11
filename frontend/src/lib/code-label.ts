@@ -7,6 +7,8 @@ export type CodeGroup =
   | "incidentRisks"
   | "incidentFields"
   | "locationFields"
+  | "mapFeatureKinds"
+  | "mapFeatureFields"
   | "resourceTypes"
   | "resourceCategories"
 
@@ -24,6 +26,8 @@ export function useCodeLabel(): (group: CodeGroup, code: string) => string {
       incidentRisks: t("incidentRisks", { returnObjects: true }),
       incidentFields: t("incidentFields", { returnObjects: true }),
       locationFields: t("locationFields", { returnObjects: true }),
+      mapFeatureKinds: t("mapFeatureKinds", { returnObjects: true }),
+      mapFeatureFields: t("mapFeatureFields", { returnObjects: true }),
       resourceTypes: t("resourceTypes", { returnObjects: true }),
       resourceCategories: t("resourceCategories", { returnObjects: true }),
     }

@@ -11,6 +11,7 @@ type Priority = Schemas["IncidentPriority"]
 type Detail = Schemas["IncidentDetail"]
 type Event = Schemas["IncidentEventResponse"]
 type Me = Schemas["MeResponse"]
+type MapFeature = Schemas["MapFeatureResponse"]
 
 export const INCIDENT_TYPES: Schemas["IncidentTypeResponse"][] = [
   {
@@ -68,6 +69,14 @@ export interface IncidentSeed {
 
 export type StoredIncident = Stored
 
+/** Perímetro guardado (mapa operativo, M.2: solo se consulta). */
+export interface PerimeterSeed {
+  ring: [number, number][]
+  label?: string | null
+  note?: string | null
+  status?: Schemas["MapFeatureStatus"]
+}
+
 export class FakeIncidents {
   readonly incidents: Stored[] = []
   /** Lo fija el doble de asignaciones: retira los recursos al cerrar o cancelar. */
@@ -75,10 +84,47 @@ export class FakeIncidents {
   private readonly events = new Map<string, Event[]>()
   /** El listado responde 500. */
   failList = false
+  /** Elementos del mapa operativo por incidente. */
+  private readonly mapFeatures = new Map<string, MapFeature[]>()
+  /** `GET /incidents/:id/map-features` responde 500. */
+  failMapFeatures = false
+  private featureSequence = 0
   private sequence = 0
   private clock = Date.parse("2026-10-07T08:00:00Z")
 
   /** Crea un incidente directamente en el «servidor» (datos previos de un test). */
+  /** Perímetro ya guardado en un incidente (como si lo hubiera dibujado coordinación). */
+  addPerimeter(incidentId: string, seed: PerimeterSeed): MapFeature {
+    const features = this.mapFeatures.get(incidentId) ?? []
+    const now = new Date(this.clock).toISOString()
+    const retired = seed.status === "retired"
+    const author = { id: "00000000-0000-4000-8000-000000000101", full_name: "Usuario coordinator" }
+    const feature: MapFeature = {
+      type: "Feature",
+      id: `40000000-0000-4000-8000-${String(++this.featureSequence).padStart(12, "0")}`,
+      geometry: { type: "Polygon", coordinates: [seed.ring] },
+      properties: {
+        incident_id: incidentId,
+        kind: "perimeter",
+        status: seed.status ?? "active",
+        label: seed.label ?? null,
+        note: seed.note ?? null,
+        verification: "unverified",
+        version: 1,
+        created_at: now,
+        created_by: author,
+        updated_at: now,
+        updated_by: author,
+        retired_at: retired ? now : null,
+        retired_by: retired ? author : null,
+        retire_reason: retired ? "Sustituido" : null,
+        is_simulated: true,
+      },
+    }
+    this.mapFeatures.set(incidentId, [...features, feature])
+    return feature
+  }
+
   add(seed: IncidentSeed): Detail {
     const type = INCIDENT_TYPES.find((t) => t.code === (seed.typeCode ?? "traffic_accident"))
     if (!type) throw new Error("tipo desconocido")
@@ -174,6 +220,17 @@ export class FakeIncidents {
 
     if (route === "GET /incidents/:id") return json(200, this.detail(incident))
     if (route === "GET /incidents/:id/events") return json(200, this.events.get(incident.id) ?? [])
+    // Como el backend: activas por defecto; `include_retired=true` añade las retiradas.
+    if (route === "GET /incidents/:id/map-features") {
+      if (this.failMapFeatures) return error(500, "internal_error")
+      const includeRetired = query.get("include_retired") === "true"
+      return json(200, {
+        type: "FeatureCollection",
+        features: (this.mapFeatures.get(incident.id) ?? []).filter(
+          (feature) => includeRetired || feature.properties.status === "active"
+        ),
+      })
+    }
 
     // Como el backend: el permiso se comprueba antes que la versión.
     if (route === "POST /incidents/:id/notes") {

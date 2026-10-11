@@ -4,7 +4,7 @@ Prototipo demostrable de una plataforma de coordinación de emergencias: un cent
 
 > **⚠️ Prototipo de demostración.** Emergency Command **no es un sistema real de emergencias** y **no está conectado** al 112, a servicios públicos ni a ninguna fuente real de datos. Todas las organizaciones, usuarios, recursos e incidentes que incluye son **ficticios y están marcados como simulados**.
 
-**Estado actual: Fase 4.** Funciona:
+**Estado actual: Fase 4 completada; mapa operativo en curso (M.1, backend del perímetro, completada).** Funciona:
 
 - autenticación, control de acceso por rol (RBAC) y **ámbito organizativo**: cada operador modifica solo los recursos de su organización, aunque consulta los de todas;
 - **incidentes:** alta, edición, ciclo de vida con cambios de estado validados, incidente padre, historial (timeline) y notas;
@@ -12,6 +12,7 @@ Prototipo demostrable de una plataforma de coordinación de emergencias: un cent
 - **centro de mando** con datos reales: indicadores, **mapa** de incidentes activos, incidentes activos, incidente seleccionado y resumen de recursos;
 - **ubicaciones con PostGIS:** coordenadas validadas en cada incidente, minimapa en la ficha y selección de la posición en el mapa al dar de alta o editar;
 - **asignación de recursos:** candidatos ordenados por **ETA estimada** (el sistema informa; la persona decide y confirma), «en el lugar», retirada con motivo, reasignación y retirada automática al cerrar; bases de los recursos asignados en el mapa;
+- **mapa operativo:** coordinación y administración pueden crear, editar y retirar el **perímetro** de un incidente mediante la API (siempre «dibujado · no validado» y con historial). El centro de mando **muestra** el perímetro del incidente seleccionado en el mapa (contorno discontinuo) y en el panel lateral, solo en lectura; dibujarlo desde la interfaz llega en la siguiente subfase;
 - datos simulados de Asturias para la demo.
 
 Todavía **no** hay posiciones GPS de recursos, rutas por carretera, tiempo real (WebSockets), simulador, IA ni hospitales: llegan en fases posteriores. La ETA es siempre una **estimación** local (distancia × sinuosidad / velocidad media del tipo), sin servicios externos. La lista completa de lo implementado y lo pendiente está en [`docs/architecture.md`](docs/architecture.md#15-implementado-y-pendiente).
@@ -135,6 +136,7 @@ Qué puede hacer cada rol. El **rol** decide qué acciones existen; el **ámbito
 | Asignar, retirar y reasignar recursos a un incidente | ✅ | ✅ | ❌ |
 | Marcar que un recurso asignado está «en el lugar» | ✅ | ✅ | ✅ solo de su organización |
 | Ver organizaciones | ✅ | ✅ | ❌ |
+| Crear, editar y retirar perímetros del mapa operativo (por ahora solo mediante la API) | ✅ | ✅ | ❌ |
 
 Lo que un rol no puede hacer no aparece en la interfaz (en la ficha de un recurso de otra organización, el operador ve por qué), y la API responde 403 si se intenta igualmente (`permission_denied`, `field_not_permitted` u `organization_out_of_scope`).
 
@@ -225,7 +227,8 @@ Vite redirige `/api` al backend (`http://localhost:8000` por defecto; se cambia 
   - la inicial habilita la extensión PostGIS y crea `roles`, `organizations`, `users` y `refresh_tokens`;
   - la de la Fase 2 crea los catálogos de tipos de incidente y de recurso, `incidents`, `incident_events` (historial de solo inserción) y `resources`;
   - las de la Fase 3 crean `locations` (`geometry(Point, 4326)` con índice GiST), trasladan a ella la ubicación de cada incidente y añaden el evento `location_changed`;
-  - las de la Fase 4 añaden la velocidad media por tipo de recurso, la base de cada recurso (en `locations`) y `resource_assignments`.
+  - las de la Fase 4 añaden la velocidad media por tipo de recurso, la base de cada recurso (en `locations`) y `resource_assignments`;
+  - la del mapa operativo (M.1) crea `incident_map_features` (`geometry(Geometry, 4326)` con índice GiST) y añade los eventos `map_feature_*`. Su `downgrade` se niega si ya hay geometrías o eventos de geometría.
 - Los roles y los catálogos de tipos se crean en las migraciones, no en el seed, porque el sistema los necesita en cualquier entorno.
 - El seed es idempotente y fuera de `development` se niega a ejecutarse:
   - **usuarios y organizaciones:** crea lo que falta y restaura los datos demo modificados;
@@ -313,7 +316,7 @@ emergency-command/
 │  └─ architecture.md    arquitectura y decisiones
 ├─ backend/              FastAPI + SQLAlchemy async + Alembic (uv)
 │  ├─ app/               api/v1 · services · repositories · models · schemas · domain · core · db
-│  ├─ alembic/           migraciones (Fases 1, 2 y 3)
+│  ├─ alembic/           migraciones (Fases 1 a 4 y mapa operativo M.1)
 │  ├─ seeds/             datos de demostración (solo development)
 │  └─ tests/             unit/ · integration/
 └─ frontend/             React + Vite + TypeScript (pnpm)

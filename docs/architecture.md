@@ -124,6 +124,10 @@ Todos bajo `/api/v1`. «Autenticado» exige un access token válido; los permiso
 | `GET /incidents/{id}/assignment-candidates` | `incidents:read` + `resources:read` | Recursos asignables **del ámbito de escritura del usuario** (filtrado en la consulta), ordenados por ETA estimada, con los tipos sugeridos marcados. Filtros: `type`, `organization_id`, `include_assigned`. **Sin preselección** |
 | `POST /incidents/{id}/assignments` | `assignments:manage` + ámbito de escritura sobre el recurso | `{resource_id, version, reassign?}` → detalle del incidente. Recurso fuera del ámbito (también al reasignar): 403 `organization_out_of_scope` |
 | `POST /assignments/{id}/arrival` | `assignments:update` + ámbito de escritura sobre el recurso | Marca «en el lugar» (`{version}` del incidente). Recurso fuera del ámbito: 403 `organization_out_of_scope` |
+| `GET /incidents/{id}/map-features` | `incidents:read` | Geometrías del mapa operativo del incidente como `FeatureCollection` GeoJSON (activas; `include_retired=true` añade las retiradas). Ver [sección 5.2](#52-mapa-operativo-m1) |
+| `POST /incidents/{id}/map-features` | `map_features:manage` | Dibuja una geometría (`{kind, geometry, label?, note?}`; por ahora solo `perimeter`) |
+| `PATCH /map-features/{id}` | `map_features:manage` | Edita geometría, etiqueta o nota con la `version` **del elemento** |
+| `POST /map-features/{id}/retire` | `map_features:manage` | Retira con motivo (`{version, reason}`); no se borra |
 | `POST /assignments/{id}/release` | `assignments:manage` + ámbito de escritura sobre el recurso | Retira con motivo (`{version, reason}`). Recurso fuera del ámbito: 403 `organization_out_of_scope` |
 | `GET /dashboard/summary` | `incidents:read` + `resources:read` | KPIs del centro de mando ([sección 7](#7-resumen-del-centro-de-mando)) |
 
@@ -140,7 +144,7 @@ Todos bajo `/api/v1`. «Autenticado» exige un access token válido; los permiso
 
 ## 3. Modelo de datos
 
-Seis migraciones en `backend/alembic/versions/`:
+Siete migraciones en `backend/alembic/versions/`:
 
 | Migración | Contenido |
 |---|---|
@@ -149,6 +153,7 @@ Seis migraciones en `backend/alembic/versions/`:
 | `20261008_16ed0556ad5c` (Fase 3) | `locations` con `geom geometry(Point, 4326)` e índice GiST; traslado del municipio y la descripción de cada incidente a su ubicación (sin tocar `version`, `updated_at` ni el historial); `incidents.location_id NOT NULL UNIQUE`. El `downgrade` restaura el texto y pierde las coordenadas |
 | `20261008_22b43ff4025b` (Fase 3) | Amplía el CHECK de `incident_events.event_type` con `location_changed`. El `downgrade` se niega si ya hay eventos de ese tipo (el historial no se puede reescribir) |
 | `20261009_3ba873c38add` (Fase 4) | `resource_types.average_speed_kmh` (velocidades de la ETA, cargadas en la migración); base de cada recurso en `locations` (`resources.base_location_id NOT NULL UNIQUE`), con traslado del municipio. El `downgrade` pierde las coordenadas de las bases |
+| `20261009_bdbee921361f` (mapa operativo, M.1) | `incident_map_features` (`geometry(Geometry, 4326)` con GiST, CHECK de tipo de geometría por `kind`, `ST_IsValid` y coherencia de la retirada); CHECK de `event_type` con `map_feature_added`, `map_feature_updated` y `map_feature_retired`. El `downgrade` se niega si hay geometrías o eventos de geometría |
 | `20261009_e5df184e14c9` (Fase 4) | `resource_assignments` con el índice único parcial `uq_resource_assignments_active_resource` (una asignación activa por recurso); CHECK de `event_type` con `resource_assigned`, `resource_arrived` y `resource_released`. El `downgrade` se niega si ya hay asignaciones o eventos de asignación |
 
 ### 3.1 Tablas de la Fase 1
@@ -327,13 +332,17 @@ Un solo nivel: un incidente con padre no puede tener hijos, y un incidente con h
 | `resource_assigned` | `resource` (código), `resource_id`, `resource_type`, `eta` (`{minutes, distance_km, origin}` o nulo), `eta_unavailable`, `reassigned_from` |
 | `resource_arrived` | `resource`, `resource_id` |
 | `resource_released` | `resource`, `resource_id`, `reason`, `reassigned_to` |
+| `map_feature_added` | `feature_id`, `kind`, `label`, `before` (nulo) y `after` (geometría GeoJSON nueva) |
+| `map_feature_updated` | `feature_id`, `kind`, `label`, `before` y `after` (geometría anterior y actual; iguales si solo cambian etiqueta o nota) y `fields` (`geometry`, `label`, `note`) |
+| `map_feature_retired` | `feature_id`, `kind`, `label`, `before` (geometría retirada), `after` (nulo) y `reason` |
 
 - Cada cambio inserta su evento **en la misma transacción** que el propio cambio: el historial no puede desincronizarse del incidente.
 - **Solo inserción**, también en la base de datos: un trigger impide `UPDATE`, `DELETE` y `TRUNCATE`.
 - El `payload` lleva códigos y valores; el frontend compone la frase traducida.
 - `actor_user_id` nulo significa que el evento lo generó el sistema (por ejemplo, el seed); la interfaz lo muestra como «Sistema».
 - **Una edición sin cambios reales no escribe nada:** ni evento ni incremento de `version`.
-- Las coordenadas de `location_changed` forman parte del historial protegido por `incidents:read`, pero **nunca llegan a los logs** de la aplicación, a los mensajes de excepción ni a las trazas.
+- Las coordenadas de `location_changed` forman parte del historial protegido por `incidents:read`, pero **nunca llegan a los logs** de la aplicación, a los mensajes de excepción ni a las trazas. Lo mismo vale para las geometrías de `map_feature_*`.
+- **El timeline no se rompe con tipos nuevos:** los eventos `map_feature_*` se muestran sin la geometría, y cualquier tipo que esta versión del frontend no conozca aparece como «Evento registrado (…)» ([sección 5.2](#52-mapa-operativo-m1)).
 
 ### 4.6 Concurrencia
 
@@ -381,6 +390,36 @@ Un solo nivel: un incidente con padre no puede tener hijos, y un incidente con h
 - **Cerrar o cancelar** un incidente retira automáticamente sus asignaciones activas (`incident_closed`); la confirmación enumera los recursos.
 - **Toda escritura** sube una vez la `version` del incidente (y la del recurso cuando cambia su estado) y devuelve el detalle del incidente.
 - **Preparado para la Fase 5:** todo cambio de asignación genera su `IncidentEvent` desde un servicio (el EventBus solo tendrá que publicarlos tras el commit), y `origin` permite estimar desde una posición actual (`resource_positions`, solo diseñada). Hueco conocido: los cambios manuales de estado de un recurso no generan evento.
+
+### 5.2 Mapa operativo (M.1)
+
+Geometrías dibujadas sobre un incidente (`CLAUDE.md` §2.12). M.1 es el **backend**; M.2, la **lectura en la interfaz** (al final de esta sección); dibujar llega en M.3.
+
+- **Modelo `IncidentMapFeature`** (`incident_map_features`):
+  - `kind` de un catálogo fijo: `perimeter`, `affected_area`, `road_closure`, `exclusion_zone`, `safe_zone`, `point_of_interest`;
+  - `status` (`active` o `retired`) y `geom geometry(Geometry, 4326)` con índice GiST;
+  - etiqueta, nota, autoría y retirada;
+  - `version` propia: editar una geometría no cambia la del incidente;
+  - el GeoJSON se calcula en PostGIS (`ST_AsGeoJSON`, 6 decimales), sin Shapely.
+- **Siempre «no validado»:** las respuestas llevan `verification: "unverified"`. Nada de lo dibujado es un dato oficial.
+- **La API solo acepta `perimeter`** (un polígono). El modelo y los CHECK ya contemplan los demás tipos.
+- **Validación en tres capas:**
+  1. **Esquema:** GeoJSON con coordenadas en rango, sin `NaN` y con listas acotadas.
+  2. **Dominio puro** (`domain/map_features.py`): geometría vacía, tipo incorrecto, huecos, anillo sin cerrar, polígono degenerado o alineado, área de la demo, 500 vértices como máximo, 32 KiB por geometría y 64 KiB por evento.
+  3. **PostGIS:** `ST_IsValid` (autointersecciones, `geometry_invalid_topology`) y los CHECK de la tabla como última defensa.
+- **Historial:** cada alta, edición y retirada inserta su evento (`map_feature_added`, `map_feature_updated`, `map_feature_retired`) con `before` y `after` en la **misma transacción**. Una edición sin cambios no escribe nada.
+- **Concurrencia y estado:**
+  - se bloquea el incidente y después la geometría (orden global de bloqueos);
+  - una versión obsoleta da `409 version_conflict`;
+  - un incidente cerrado o cancelado es de solo lectura (`incident_closed`);
+  - una geometría retirada no se edita (`map_feature_retired`).
+- **Privacidad:** las geometrías nunca se escriben en logs y los errores no repiten la entrada.
+- **Cronología del frontend:** `TimelineEntry` muestra el tipo de elemento, la etiqueta, los campos cambiados o el motivo, **nunca la geometría**. Cualquier otro tipo de evento desconocido se muestra como «Evento registrado (…)» con un icono genérico, en lugar de romper la ficha. Los eventos existentes se representan igual que antes. (En M.1 los reconocía por su código; desde M.2 usa los tipos generados.)
+- **Lectura en la interfaz (M.2, solo lectura):**
+  - `features/map-features/`: `useIncidentPerimeters(id)` consulta los elementos del incidente seleccionado (clave `["incidents", "detail", id, "map-features"]`, así que invalidar el incidente también los refresca) y se queda con los perímetros activos. Sin `placeholderData`: al cambiar de incidente nunca se ve, ni un instante, el perímetro del anterior.
+  - **Mapa:** `features/map/perimeter-layer.tsx` añade una fuente GeoJSON (`ec-perimeters`) y dos capas: relleno al 10 % y contorno discontinuo de 2 px, en el color de `--status-warning`. Son capas de MapLibre, así que los marcadores DOM quedan siempre encima. Sin interacción. Se añaden cuando el estilo está cargado; sin mapa base no se pueden añadir, y un aviso remite al panel lateral. «Ajustar a incidentes» incluye los vértices.
+  - **Superposición y leyenda:** «Cargando perímetro…», error con «Reintentar» (sin ocultar los incidentes) e indicador «Perímetro · Dibujado · no validado». La leyenda explica el trazo.
+  - **Panel lateral:** sección «Perímetros» con etiqueta, «Dibujado · no validado», nota, simulado y última modificación, o «Este incidente no tiene ningún perímetro dibujado». Sin acciones para ningún rol.
 
 ---
 
@@ -487,6 +526,7 @@ refresh(A) de nuevo:
   | `organizations:read` | ✅ | ✅ | ❌ |
   | `assignments:manage` (asignar, retirar, reasignar) | ✅ | ✅ | ❌ |
   | `assignments:update` (marcar «en el lugar») | ✅ | ✅ | ✅ |
+  | `map_features:manage` (crear, editar y retirar geometrías del mapa operativo) | ✅ | ✅ | ❌ |
 
 - **Matriz aprobada** en `CLAUDE.md` §2.11 (etapa de roles, permisos y ámbito organizativo, en curso). El estado del incidente y el estado operativo de un recurso son permisos distintos: el operador no cambia el primero, pero sí el segundo.
 - **Comprobación:** con la dependencia `require_permission(Permission.X)` en el router. Lo que depende del cuerpo de la petición se comprueba en el servicio: cerrar o cancelar (según el estado de destino), los campos no operativos de una edición (`OPERATIONAL_FIELDS` en `domain/incident_rules.py`; cuenta lo **enviado**, no lo que cambiaría, y se comprueba antes de leer o modificar nada) y la prioridad inicial y el incidente padre de un alta (`CREATE_FIELDS_REQUIRING_FULL_EDIT`; sin `incidents:update`, se aplican la prioridad del tipo y ningún padre). Sin permiso responde `403 {"detail":"permission_denied"}`. Un test de inventario (`tests/integration/test_permission_matrix.py`) declara los permisos de **cada ruta** de la API, la llama con los tres roles y falla si aparece una ruta sin declarar.
@@ -580,7 +620,7 @@ Cada módulo de `features/` sigue el mismo reparto: `types.ts` (alias de los tip
 | Ruta | Permiso | Contenido |
 |---|---|---|
 | `/login` | público | Inicio de sesión |
-| `/` | sesión | **Centro de mando:** franja de KPIs, **mapa** de incidentes activos como zona principal, columna plegable de incidentes activos con filtros y columna plegable de detalle (incidente seleccionado con acciones de estado, **recursos asignados** con sus acciones, últimos 5 eventos y resumen de recursos por estado). Ver «Disposición del centro de mando» |
+| `/` | sesión | **Centro de mando:** franja de KPIs, **mapa** de incidentes activos como zona principal, columna plegable de incidentes activos con filtros y columna plegable de detalle (incidente seleccionado con acciones de estado, **recursos asignados** con sus acciones, **perímetros** en solo lectura, últimos 5 eventos y resumen de recursos por estado). Ver «Disposición del centro de mando» |
 | `/incidents` | `incidents:read` | Listado con filtros (incluido «Coordenadas»), orden y paginación |
 | `/incidents/new` | `incidents:create` | Alta con validación, coordenadas opcionales («Elegir en el mapa») y sección fija de `details` según el tipo |
 | `/incidents/:id` | `incidents:read` | Detalle con minimapa, acciones de estado, edición, **recursos asignados** (asignar, en el lugar, retirar, reasignar), padre/hijos, historial y notas |
@@ -711,8 +751,8 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 
 | | Herramientas | Qué cubren |
 |---|---|---|
-| Backend (425 tests) | pytest, ruff, mypy (estricto) | **Fase 1:** configuración, redacción de logs, errores, seguridad (Argon2, JWT), permisos, metadatos de modelos (sin columnas geográficas, fechas con zona), health, login, `/me`, refresh y reutilización, logout, 403 por rol y protección por defecto. **Fase 2:** reglas puras (transiciones, `allowed_transitions`, `details`, recursos), modelos y trigger de solo inserción, eventos en la misma transacción, API de incidentes y recursos (permisos, filtros, orden, paginación, 409, ediciones sin cambios, notas en cerrados, padre/hijo), KPIs del dashboard y seed (marcado, coherencia del historial, idempotencia, no deshace cambios, no consume códigos). **Fase 3:** reglas geográficas puras (rangos, pares, área de la demo, `bbox`), migración con datos (traslado, downgrade y negativa a deshacer `location_changed`) sobre una base de datos propia, PostGIS (tipo, SRID, índice GiST, 1:1), coordenadas en la API (redondeo, `NaN`, códigos de error), `location_changed` y `version`, filtro `has_coordinates`, `GET /incidents/map` (filtros, `bbox`, orden GeoJSON, truncado, 401/403), 422 sin `input`, **coordenadas fuera de los logs** y seed con coordenadas. **Fase 4:** ETA (Haversine, sinuosidad, redondeo, sin coordenadas), reglas de asignación y transiciones automáticas, migraciones con datos y negativa a deshacer asignaciones, API de asignaciones (efectos, errores, varios recursos, llegada, retirada con cada motivo, reasignación atómica, cierre con retirada, bloqueos, permisos, candidatos por ETA sin preselección, ETA guardada que no cambia), **concurrencia real** (dos asignaciones simultáneas: una gana; cierre y reasignación simultáneos terminan de forma coherente y sin interbloqueos; un interbloqueo real de PostgreSQL se traduce a `409 concurrent_update`), índice único parcial, coordenadas de bases fuera de los logs y seed coherente |
-| Frontend (108 tests) | Vitest, Testing Library, ESLint, `tsc` | Cliente API, carga de i18n, lógica pura de filtros y formularios, y flujos completos contra un backend falso en memoria que imita el contrato real: login, rutas y navegación por rol, listados con filtros en la URL, detalle e historial, cambios de estado con confirmación, 409 con recarga, edición, notas, altas con validación, desactivación, centro de mando (KPIs, selección, resumen de recursos) y «Volver» con filtros. **Fase 3**, con un doble de `maplibre-gl` (jsdom no tiene WebGL): marcadores, selección mapa ↔ lista ↔ panel, centrado con y sin movimiento reducido, filtros compartidos, encuadre, incidentes sin coordenadas, fallo del mapa base y sin WebGL2, filtro del listado, minimapa, «Elegir en el mapa», validación de coordenadas e historial de `location_changed`. **Fase 4:** candidatos por ETA sin preselección, asignación, retirada con motivo obligatorio, llegada del operador, reasignación confirmada, cierre que enumera los recursos, ficha de recurso asignado bloqueada, panel lateral, indicador y bases (agrupadas) en el mapa, y aviso de `concurrent_update`. **Rediseño:** acciones de estado y de recursos en el panel lateral (con los permisos del operador), plegado de columnas con persistencia y reapertura al seleccionar, recentrado al redimensionar el mapa y barra lateral plegada sin perder los nombres accesibles |
+| Backend (565 tests) | pytest, ruff, mypy (estricto) | **Fase 1:** configuración, redacción de logs, errores, seguridad (Argon2, JWT), permisos, metadatos de modelos (sin columnas geográficas, fechas con zona), health, login, `/me`, refresh y reutilización, logout, 403 por rol y protección por defecto. **Fase 2:** reglas puras (transiciones, `allowed_transitions`, `details`, recursos), modelos y trigger de solo inserción, eventos en la misma transacción, API de incidentes y recursos (permisos, filtros, orden, paginación, 409, ediciones sin cambios, notas en cerrados, padre/hijo), KPIs del dashboard y seed (marcado, coherencia del historial, idempotencia, no deshace cambios, no consume códigos). **Fase 3:** reglas geográficas puras (rangos, pares, área de la demo, `bbox`), migración con datos (traslado, downgrade y negativa a deshacer `location_changed`) sobre una base de datos propia, PostGIS (tipo, SRID, índice GiST, 1:1), coordenadas en la API (redondeo, `NaN`, códigos de error), `location_changed` y `version`, filtro `has_coordinates`, `GET /incidents/map` (filtros, `bbox`, orden GeoJSON, truncado, 401/403), 422 sin `input`, **coordenadas fuera de los logs** y seed con coordenadas. **Fase 4:** ETA (Haversine, sinuosidad, redondeo, sin coordenadas), reglas de asignación y transiciones automáticas, migraciones con datos y negativa a deshacer asignaciones, API de asignaciones (efectos, errores, varios recursos, llegada, retirada con cada motivo, reasignación atómica, cierre con retirada, bloqueos, permisos, candidatos por ETA sin preselección, ETA guardada que no cambia), **concurrencia real** (dos asignaciones simultáneas: una gana; cierre y reasignación simultáneos terminan de forma coherente y sin interbloqueos; un interbloqueo real de PostgreSQL se traduce a `409 concurrent_update`), índice único parcial, coordenadas de bases fuera de los logs y seed coherente. **Mapa operativo (M.1):** reglas puras del perímetro (estructura, forma, normalización, 500 vértices, límite del evento, errores sin coordenadas, autointersección delegada a PostGIS), ciclo de vida completo con historial, edición sin cambios, versión obsoleta sin sobrescribir, permisos (el operador lee pero no dibuja, 401), incidente cerrado de solo lectura, geometría retirada inmodificable, geometrías inválidas rechazadas sin cambios, errores y logs sin geometrías, todo o nada en la misma transacción, migración (ida y vuelta, `downgrade` rechazado con datos) y CHECK de la tabla |
+| Frontend (153 tests) | Vitest, Testing Library, ESLint, `tsc` | Cliente API, carga de i18n, lógica pura de filtros y formularios, y flujos completos contra un backend falso en memoria que imita el contrato real: login, rutas y navegación por rol, listados con filtros en la URL, detalle e historial, cambios de estado con confirmación, 409 con recarga, edición, notas, altas con validación, desactivación, centro de mando (KPIs, selección, resumen de recursos) y «Volver» con filtros. **Fase 3**, con un doble de `maplibre-gl` (jsdom no tiene WebGL): marcadores, selección mapa ↔ lista ↔ panel, centrado con y sin movimiento reducido, filtros compartidos, encuadre, incidentes sin coordenadas, fallo del mapa base y sin WebGL2, filtro del listado, minimapa, «Elegir en el mapa», validación de coordenadas e historial de `location_changed`. **Fase 4:** candidatos por ETA sin preselección, asignación, retirada con motivo obligatorio, llegada del operador, reasignación confirmada, cierre que enumera los recursos, ficha de recurso asignado bloqueada, panel lateral, indicador y bases (agrupadas) en el mapa, y aviso de `concurrent_update`. **Rediseño:** acciones de estado y de recursos en el panel lateral (con los permisos del operador), plegado de columnas con persistencia y reapertura al seleccionar, recentrado al redimensionar el mapa y barra lateral plegada sin perder los nombres accesibles. **Mapa operativo (M.1), cronología:** texto de cada evento existente sin cambios, `map_feature_*` sin mostrar la geometría, payloads incompletos y tipos de evento desconocidos sin romper la entrada. **Mapa operativo (M.2):** perímetro en la capa (contorno discontinuo) y en la lista como no validado, retirados fuera, leyenda, sin consultas sin selección, incidente sin perímetro, cambio de incidente sin restos del anterior (también mientras carga), error y reintento sin ocultar los incidentes, sin mapa base, encuadre con el perímetro y solo peticiones GET |
 
 - Los tests del backend usan una base de datos propia (`<POSTGRES_DB>_test`), recreada y migrada desde cero en cada ejecución; cada test corre en una transacción que se deshace. Los del frontend no necesitan backend.
 - **Verificación de extremo a extremo** (manual, no versionada): Edge en modo headless controlado por CDP contra el stack de Docker con el seed. Se hace **en solo lectura** sobre la base de desarrollo, porque el historial es de solo inserción y cada escritura consumiría códigos `INC-`; las escrituras están cubiertas por los tests.
@@ -792,6 +832,7 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 - **Recursos:** catálogo de tipos, alta, consulta, edición, estado operativo y desactivación.
 - **Centro de mando:** mapa como zona principal, franja de KPIs, columnas plegables con los incidentes activos (con filtros) y con el detalle del incidente seleccionado (acciones de estado, recursos asignados con sus acciones y últimos eventos) y el resumen de recursos, con datos reales.
 - **Ubicaciones y mapa:** `Location` con PostGIS (`Point` 4326, índice GiST), coordenadas validadas, `location_changed`, `GET /incidents/map` (GeoJSON y `bbox`), mapa del centro de mando con MapLibre y OpenFreeMap, selección mapa ↔ lista ↔ panel, minimapa en la ficha y selección de posición en el formulario.
+- **Mapa operativo, M.1 y M.2:** `IncidentMapFeature` con PostGIS, API del perímetro (crear, editar y retirar), validación en tres capas, historial `map_feature_*` y migración; en la interfaz, el perímetro del incidente seleccionado en el mapa y en el panel lateral, solo en lectura. Dibujar y el resto (M.3 a M.6) están pendientes ([sección 5.2](#52-mapa-operativo-m1)).
 - **Asignación de recursos y ETA:** bases de recursos, velocidades por tipo, `ResourceAssignment`, candidatos por ETA estimada (sin preselección), asignar, «en el lugar», retirar con motivo, reasignar, retirada al cerrar, `resources_assigned` automático, eventos en el historial y bases de los asignados en el mapa.
 - **Seed simulado de Asturias:** organizaciones, usuarios, recursos (con bases), incidentes (con coordenadas aproximadas), asignaciones e historial, todo marcado como simulado.
 - **API REST** documentada en OpenAPI y **frontend funcional** con tipos generados, i18n y sistema de diseño propio.
@@ -802,6 +843,7 @@ Las reglas están en `CLAUDE.md` §7; `src/styles/tokens.css` las aplica:
 | Funcionalidad | Qué existe hoy | Qué falta | Fase |
 |---|---|---|---|
 | Posiciones actuales de recursos | Base con coordenadas; `eta.origin` preparado | `resource_positions` (diseñada), recursos moviéndose en el mapa | Fase 5 |
+| Mapa operativo en la interfaz | Backend del perímetro (M.1) y su lectura en el mapa y el panel (M.2); el modelo ya contempla los seis tipos | M.3 dibujo con Terra Draw · M.4 resto de tipos · M.5 capas y vista global · M.6 cierre | Mapa operativo (`CLAUDE.md` §2.12) |
 | Lógica espacial avanzada | Filtro por rectángulo con índice GiST | Distancias, rutas (OSRM), zonas de cobertura, clustering | Fase posterior |
 | Mapa sin conexión | `VITE_MAP_STYLE_URL` configurable | Estilo y teselas locales (PMTiles) | Fase posterior |
 | Rutas y ETA por carretera | ETA estimada en línea recta × sinuosidad | Rutas reales (OSRM u otras), tiempo de activación | Fase posterior |

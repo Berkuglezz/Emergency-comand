@@ -20,6 +20,7 @@ from app.services.auth import AuthService
 from app.services.dashboard import DashboardService
 from app.services.health import HealthService
 from app.services.incidents import IncidentService
+from app.services.map_features import MapFeatureService
 from app.services.organizations import OrganizationService
 from app.services.resources import ResourceService
 
@@ -62,6 +63,10 @@ def get_assignment_service(session: SessionDep) -> AssignmentService:
     return AssignmentService(session)
 
 
+def get_map_feature_service(session: SessionDep) -> MapFeatureService:
+    return MapFeatureService(session)
+
+
 HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 OrganizationServiceDep = Annotated[OrganizationService, Depends(get_organization_service)]
@@ -69,6 +74,7 @@ IncidentServiceDep = Annotated[IncidentService, Depends(get_incident_service)]
 ResourceServiceDep = Annotated[ResourceService, Depends(get_resource_service)]
 DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)]
 AssignmentServiceDep = Annotated[AssignmentService, Depends(get_assignment_service)]
+MapFeatureServiceDep = Annotated[MapFeatureService, Depends(get_map_feature_service)]
 
 
 # --- Autenticación y autorización -----------------------------------------

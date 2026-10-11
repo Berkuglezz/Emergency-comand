@@ -139,6 +139,8 @@ PERMISSION_MATRIX: dict[Permission, tuple[bool, bool, bool]] = {
     Permission.ORGANIZATIONS_READ: (True, True, False),
     Permission.ASSIGNMENTS_MANAGE: (True, True, False),
     Permission.ASSIGNMENTS_UPDATE: (True, True, True),
+    # Mapa operativo (D-M2): solo coordinador y admin dibujan.
+    Permission.MAP_FEATURES_MANAGE: (True, True, False),
 }
 
 

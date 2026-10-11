@@ -2,6 +2,7 @@
 
 from app.models.incident import Incident
 from app.models.incident_event import IncidentEvent
+from app.models.incident_map_feature import IncidentMapFeature
 from app.models.incident_type import IncidentType
 from app.models.location import Location
 from app.models.organization import Organization
@@ -15,6 +16,7 @@ from app.models.user import User
 __all__ = [
     "Incident",
     "IncidentEvent",
+    "IncidentMapFeature",
     "IncidentType",
     "Location",
     "Organization",

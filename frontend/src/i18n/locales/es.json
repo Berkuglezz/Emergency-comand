@@ -94,13 +94,19 @@
       "unlocated_one": "{{formatted}} incidente activo sin coordenadas.",
       "unlocated_other": "{{formatted}} incidentes activos sin coordenadas.",
       "viewUnlocated": "Ver en el listado",
+      "perimeterLoading": "Cargando perímetro…",
+      "perimeterShown_one": "Perímetro · Dibujado · no validado",
+      "perimeterShown_other": "{{count}} perímetros · Dibujado · no validado",
+      "perimeterError": "No se pudo cargar el perímetro.",
       "legend": {
         "title": "Leyenda",
         "priority": "Prioridad",
         "status": "Estado",
         "pending": "Sin intervenir",
         "active": "En intervención",
-        "controlled": "Controlado"
+        "controlled": "Controlado",
+        "mapFeatures": "Mapa operativo",
+        "perimeter": "Perímetro · Dibujado · no validado"
       }
     },
     "incidents": {
@@ -141,6 +147,7 @@
     "unsupportedDescription": "Este navegador no puede mostrar el mapa (necesita WebGL2). La lista de incidentes funciona igual.",
     "basemapErrorTitle": "Cartografía no disponible",
     "basemapErrorDescription": "Las posiciones se muestran sin mapa base.",
+    "perimeterUnavailable": "Sin cartografía no se puede dibujar el perímetro: consúltalo en el panel lateral.",
     "attribution": {
       "openFreeMap": "OpenFreeMap",
       "openMapTiles": "© OpenMapTiles",
@@ -387,7 +394,13 @@
       "reassignedFrom": "Reasignado desde {{from}}",
       "resourceArrived": "{{resource}} en el lugar",
       "resourceReleased": "Recurso retirado: {{resource}}",
-      "reassignedTo": "Reasignado a {{to}}"
+      "reassignedTo": "Reasignado a {{to}}",
+      "mapFeatureAdded": "Elemento del mapa añadido: {{kind}}",
+      "mapFeatureUpdated": "Elemento del mapa modificado: {{kind}}",
+      "mapFeatureRetired": "Elemento del mapa retirado: {{kind}}",
+      "mapFeatureLabel": "Etiqueta: {{label}}",
+      "mapFeatureChanges": "Cambios: {{fields}}",
+      "unknown": "Evento registrado ({{type}})"
     },
     "notes": {
       "label": "Nota",
@@ -502,6 +515,28 @@
     "municipality": "municipio",
     "description": "descripción",
     "coordinates": "coordenadas"
+  },
+  "mapFeatureKinds": {
+    "perimeter": "perímetro",
+    "affected_area": "zona afectada",
+    "road_closure": "corte de carretera",
+    "exclusion_zone": "zona de exclusión",
+    "safe_zone": "zona segura",
+    "point_of_interest": "punto de interés"
+  },
+  "mapFeatureFields": {
+    "geometry": "geometría",
+    "label": "etiqueta",
+    "note": "nota"
+  },
+  "mapFeatures": {
+    "unverified": "Dibujado · no validado",
+    "perimeters": {
+      "title": "Perímetros",
+      "empty": "Este incidente no tiene ningún perímetro dibujado.",
+      "unlabeled": "Perímetro sin etiqueta",
+      "updated": "Última modificación: {{author}} ·"
+    }
   },
   "incidentDetails": {
     "affected_hectares": "Superficie afectada (ha)",

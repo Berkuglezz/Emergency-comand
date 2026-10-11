@@ -156,6 +156,7 @@ async def test_me_returns_profile_role_and_permissions(
         "incidents:read",
         "incidents:update",
         "incidents:update_operational",
+        "map_features:manage",
         "organizations:read",
         "resources:read",
         "resources:update_status",

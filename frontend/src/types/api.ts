@@ -342,6 +342,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/incidents/{incident_id}/map-features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Map Features
+         * @description Geometrías del incidente como `FeatureCollection` GeoJSON. Por defecto
+         *     solo las activas; `include_retired=true` añade las retiradas.
+         */
+        get: operations["list_map_features_api_v1_incidents__incident_id__map_features_get"];
+        put?: never;
+        /**
+         * Create Map Feature
+         * @description Dibuja una geometría sobre el incidente (en esta versión, un perímetro).
+         */
+        post: operations["create_map_feature_api_v1_incidents__incident_id__map_features_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/map-features/{feature_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Map Feature
+         * @description Edita geometría, etiqueta o nota con la `version` del elemento.
+         */
+        patch: operations["update_map_feature_api_v1_map_features__feature_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/map-features/{feature_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire Map Feature
+         * @description Retira el elemento con un motivo. No se borra: queda en el historial.
+         */
+        post: operations["retire_map_feature_api_v1_map_features__feature_id__retire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/resource-types": {
         parameters: {
             query?: never;
@@ -762,7 +827,7 @@ export interface components {
          * @description Tipos de entrada del historial funcional del incidente (timeline).
          * @enum {string}
          */
-        IncidentEventType: "incident_created" | "status_changed" | "priority_changed" | "incident_updated" | "note_added" | "parent_changed" | "location_changed" | "resource_assigned" | "resource_arrived" | "resource_released";
+        IncidentEventType: "incident_created" | "status_changed" | "priority_changed" | "incident_updated" | "note_added" | "parent_changed" | "location_changed" | "resource_assigned" | "resource_arrived" | "resource_released" | "map_feature_added" | "map_feature_updated" | "map_feature_retired";
         /** IncidentKpis */
         IncidentKpis: {
             /** Active Total */
@@ -981,6 +1046,19 @@ export interface components {
             /** Parent Incident Id */
             parent_incident_id?: string | null;
         };
+        /** LineStringInput */
+        LineStringInput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "LineString";
+            /** Coordinates */
+            coordinates: [
+                number,
+                number
+            ][];
+        };
         /**
          * LocationInput
          * @description Ubicación completa: en una edición sustituye a la anterior (omitir las
@@ -1015,6 +1093,134 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /** MapFeatureCollection */
+        MapFeatureCollection: {
+            /**
+             * Type
+             * @default FeatureCollection
+             * @constant
+             */
+            type: "FeatureCollection";
+            /** Features */
+            features: components["schemas"]["MapFeatureResponse"][];
+        };
+        /**
+         * MapFeatureCreate
+         * @description Alta de un elemento. En esta versión la API solo acepta `perimeter`.
+         */
+        MapFeatureCreate: {
+            kind: components["schemas"]["MapFeatureKind"];
+            /** Geometry */
+            geometry: components["schemas"]["PolygonInput"] | components["schemas"]["LineStringInput"] | components["schemas"]["PointInput"];
+            /** Label */
+            label?: string | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** MapFeatureGeometry */
+        MapFeatureGeometry: {
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "Polygon" | "LineString" | "Point";
+            /** Coordinates */
+            coordinates: unknown;
+        };
+        /**
+         * MapFeatureKind
+         * @description Tipo de elemento dibujado sobre el mapa de un incidente (catálogo fijo).
+         * @enum {string}
+         */
+        MapFeatureKind: "perimeter" | "affected_area" | "road_closure" | "exclusion_zone" | "safe_zone" | "point_of_interest";
+        /** MapFeatureProperties */
+        MapFeatureProperties: {
+            /**
+             * Incident Id
+             * Format: uuid
+             */
+            incident_id: string;
+            kind: components["schemas"]["MapFeatureKind"];
+            status: components["schemas"]["MapFeatureStatus"];
+            /** Label */
+            label: string | null;
+            /** Note */
+            note: string | null;
+            /**
+             * Verification
+             * @default unverified
+             * @constant
+             */
+            verification: "unverified";
+            /** Version */
+            version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            created_by: components["schemas"]["EventActor"] | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            updated_by: components["schemas"]["EventActor"] | null;
+            /** Retired At */
+            retired_at: string | null;
+            retired_by: components["schemas"]["EventActor"] | null;
+            /** Retire Reason */
+            retire_reason: string | null;
+            /** Is Simulated */
+            is_simulated: boolean;
+        };
+        /**
+         * MapFeatureResponse
+         * @description `Feature` GeoJSON con el identificador del elemento.
+         */
+        MapFeatureResponse: {
+            /**
+             * Type
+             * @default Feature
+             * @constant
+             */
+            type: "Feature";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            geometry: components["schemas"]["MapFeatureGeometry"];
+            properties: components["schemas"]["MapFeatureProperties"];
+        };
+        /** MapFeatureRetire */
+        MapFeatureRetire: {
+            /** Version */
+            version: number;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * MapFeatureStatus
+         * @description Activo o retirado. Retirar nunca borra la fila (D-M4).
+         * @enum {string}
+         */
+        MapFeatureStatus: "active" | "retired";
+        /**
+         * MapFeatureUpdate
+         * @description Edición parcial con `version` obligatoria (bloqueo optimista del
+         *     elemento, D-M7). El tipo no se puede cambiar.
+         */
+        MapFeatureUpdate: {
+            /** Version */
+            version: number;
+            /** Geometry */
+            geometry?: (components["schemas"]["PolygonInput"] | components["schemas"]["LineStringInput"] | components["schemas"]["PointInput"]) | null;
+            /** Label */
+            label?: string | null;
+            /** Note */
+            note?: string | null;
         };
         /** MeResponse */
         MeResponse: {
@@ -1077,7 +1283,7 @@ export interface components {
          * Permission
          * @enum {string}
          */
-        Permission: "incidents:read" | "incidents:create" | "incidents:update" | "incidents:update_operational" | "incidents:annotate" | "incidents:change_status" | "incidents:close" | "resources:read" | "resources:update_status" | "resources:manage" | "organizations:read" | "assignments:manage" | "assignments:update";
+        Permission: "incidents:read" | "incidents:create" | "incidents:update" | "incidents:update_operational" | "incidents:annotate" | "incidents:change_status" | "incidents:close" | "resources:read" | "resources:update_status" | "resources:manage" | "organizations:read" | "assignments:manage" | "assignments:update" | "map_features:manage";
         /** PointGeometry */
         PointGeometry: {
             /**
@@ -1091,6 +1297,32 @@ export interface components {
                 number,
                 number
             ];
+        };
+        /** PointInput */
+        PointInput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "Point";
+            /** Coordinates */
+            coordinates: [
+                number,
+                number
+            ];
+        };
+        /** PolygonInput */
+        PolygonInput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "Polygon";
+            /** Coordinates */
+            coordinates: [
+                number,
+                number
+            ][][];
         };
         /**
          * ReleaseReason
@@ -2418,6 +2650,288 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IncidentDetail"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_map_features_api_v1_incidents__incident_id__map_features_get: {
+        parameters: {
+            query?: {
+                include_retired?: boolean;
+            };
+            header?: never;
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapFeatureCollection"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_map_feature_api_v1_incidents__incident_id__map_features_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapFeatureCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapFeatureResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_map_feature_api_v1_map_features__feature_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feature_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapFeatureUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapFeatureResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    retire_map_feature_api_v1_map_features__feature_id__retire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feature_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapFeatureRetire"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapFeatureResponse"];
                 };
             };
             /** @description Unauthorized */

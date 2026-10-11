@@ -1,4 +1,12 @@
-import { CircleCheck, FlaskConical, MapPin, MapPinOff, RotateCw, TriangleAlert } from "lucide-react"
+import {
+  CircleCheck,
+  FlaskConical,
+  MapPin,
+  MapPinOff,
+  RotateCw,
+  Shapes,
+  TriangleAlert,
+} from "lucide-react"
 import { Suspense, useId } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router"
@@ -14,6 +22,7 @@ import { useAssignments } from "@/features/assignments/hooks"
 import { useIncident, useIncidentMap } from "@/features/incidents/hooks"
 import { incidentErrorMessage } from "@/features/incidents/presentation"
 import { IncidentsMap } from "@/features/map/lazy"
+import { useIncidentPerimeters } from "@/features/map-features/hooks"
 import type { MapBase } from "@/features/map/incidents-map"
 import { useCodeLabel } from "@/lib/code-label"
 import { formatNumber } from "@/lib/format"
@@ -43,6 +52,8 @@ export function IncidentMapPanel({ selectedId, onSelect, className }: IncidentMa
   const label = useCodeLabel()
   // Bases de los recursos asignados al incidente seleccionado (solo esas).
   const assignments = useAssignments(selectedId ?? "", { enabled: selectedId !== null })
+  // Perímetros guardados del incidente seleccionado (misma consulta que el panel lateral).
+  const perimeters = useIncidentPerimeters(selectedId)
   // Varios recursos pueden compartir base: un marcador por punto.
   const bases = new Map<string, MapBase>()
   for (const assignment of assignments.data ?? []) {
@@ -85,6 +96,7 @@ export function IncidentMapPanel({ selectedId, onSelect, className }: IncidentMa
         <IncidentsMap
           features={features}
           bases={selectedId ? [...bases.values()] : []}
+          perimeters={perimeters.data}
           selectedId={selectedId}
           onSelect={onSelect}
           className="min-h-56 flex-1"
@@ -110,6 +122,17 @@ export function IncidentMapPanel({ selectedId, onSelect, className }: IncidentMa
                     <span role="status" className="rounded-sm bg-surface-1 px-1.5 text-xs">
                       {t("common.loading")}
                     </span>
+                  )}
+                  {perimeters.isLoading && (
+                    <span role="status" className="rounded-sm bg-surface-1 px-1.5 text-xs">
+                      {t("commandCenter.map.perimeterLoading")}
+                    </span>
+                  )}
+                  {/* Siempre «Dibujado · no validado» (D-M5): no es un dato oficial. */}
+                  {perimeters.data && perimeters.data.length > 0 && (
+                    <StatusPill tone="warning" icon={Shapes} className="bg-surface-1">
+                      {t("commandCenter.map.perimeterShown", { count: perimeters.data.length })}
+                    </StatusPill>
                   )}
                   {map.data?.truncated && (
                     <StatusPill tone="warning" icon={TriangleAlert} className="bg-surface-1">
@@ -138,6 +161,15 @@ export function IncidentMapPanel({ selectedId, onSelect, className }: IncidentMa
                   <p className="flex items-center gap-1.5 rounded-md border bg-surface-1/95 px-2 py-0.5 text-xs">
                     <MapPinOff aria-hidden className="size-3.5 shrink-0" />
                     {t("commandCenter.map.selectedUnlocated", { code: selectedUnlocated.code })}
+                  </p>
+                )}
+                {perimeters.isError && (
+                  <p className="flex items-center gap-1.5 rounded-md border border-warning-border bg-surface-1/95 px-2 py-0.5 text-xs">
+                    <TriangleAlert aria-hidden className="size-3.5 shrink-0 text-warning" />
+                    {t("commandCenter.map.perimeterError")}
+                    <Button variant="outline" size="xs" onClick={() => void perimeters.refetch()}>
+                      {t("common.retry")}
+                    </Button>
                   </p>
                 )}
                 {map.isError && (
@@ -205,6 +237,16 @@ function MapLegend() {
           <li className="flex items-center gap-1.5">
             <CircleCheck aria-hidden className="size-3.5 text-ok" />
             {t("commandCenter.map.legend.controlled")}
+          </li>
+        </ul>
+        <ul aria-label={t("commandCenter.map.legend.mapFeatures")} className="flex flex-wrap gap-3">
+          <li className="flex items-center gap-1.5">
+            {/* Mismo trazo que la capa: contorno discontinuo y relleno tenue. */}
+            <span
+              aria-hidden
+              className="size-3.5 rounded-sm border-2 border-dashed border-warning bg-warning-subtle"
+            />
+            {t("commandCenter.map.legend.perimeter")}
           </li>
         </ul>
       </div>

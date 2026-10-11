@@ -5,6 +5,7 @@ import {
   CircleCheckBig,
   FilePlus2,
   FolderTree,
+  History,
   Inbox,
   ListChecks,
   LogOut,
@@ -14,6 +15,7 @@ import {
   NotebookPen,
   PencilLine,
   ScanSearch,
+  Shapes,
   ShieldCheck,
   Signal,
   Truck,
@@ -67,6 +69,22 @@ export const EVENT_ICONS: Record<IncidentEventType, LucideIcon> = {
   resource_assigned: Truck,
   resource_arrived: MapPinCheck,
   resource_released: LogOut,
+  map_feature_added: Shapes,
+  map_feature_updated: Shapes,
+  map_feature_retired: Shapes,
+}
+
+/** Eventos de los elementos dibujados en el mapa (CLAUDE.md §2.12). */
+export type MapFeatureEventType = Extract<IncidentEventType, `map_feature_${string}`>
+
+/** Un tipo que esta versión del frontend aún no conoce no rompe el historial. */
+export function isKnownEventType(type: string): type is IncidentEventType {
+  return Object.hasOwn(EVENT_ICONS, type)
+}
+
+/** Icono de un evento; uno genérico si el tipo todavía no tiene representación. */
+export function eventIcon(type: string): LucideIcon {
+  return isKnownEventType(type) ? EVENT_ICONS[type] : History
 }
 
 const KNOWN_ERRORS = [

@@ -16,6 +16,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import Settings, get_settings
@@ -27,6 +28,7 @@ LOCATIONS = "16ed0556ad5c"  # ubicaciones (Fase 3.1)
 LOCATION_CHANGED = "22b43ff4025b"  # evento location_changed (Fase 3.2)
 RESOURCE_BASES = "3ba873c38add"  # bases de recursos y velocidades (Fase 4.1)
 ASSIGNMENTS = "e5df184e14c9"  # asignaciones (Fase 4.3)
+MAP_FEATURES = "bdbee921361f"  # mapa operativo (M.1)
 
 
 def _alembic() -> Config:
@@ -249,3 +251,109 @@ def test_assignments_downgrade_is_refused_when_assignments_exist(migration_db: S
     # Las asignaciones forman parte del historial: no se pueden deshacer.
     with pytest.raises(RuntimeError, match="asignaciones"):
         command.downgrade(_alembic(), RESOURCE_BASES)
+
+
+_INCIDENT = (
+    "WITH loc AS (INSERT INTO locations (municipality) VALUES ('Oviedo') RETURNING id)"
+    " INSERT INTO incidents (code, type_id, title, status, priority, location_id)"
+    " SELECT 'INC-000001', t.id, 'x', 'received', 'high', loc.id"
+    " FROM incident_types t, loc WHERE t.code = 'wildfire' RETURNING id"
+)
+_SQUARE = "POLYGON((-5.86 43.36, -5.85 43.36, -5.85 43.37, -5.86 43.37, -5.86 43.36))"
+_BOWTIE = "POLYGON((-5.86 43.36, -5.85 43.37, -5.85 43.36, -5.86 43.37, -5.86 43.36))"
+
+
+def _insert_feature(
+    settings: Settings,
+    incident_id: str,
+    wkt: str,
+    *,
+    kind: str = "perimeter",
+    status: str = "active",
+) -> None:
+    asyncio.run(
+        _run(
+            settings,
+            "INSERT INTO incident_map_features (incident_id, kind, status, geom)"
+            " VALUES (:incident, :kind, :status, ST_GeomFromText(:wkt, 4326))",
+            incident=incident_id,
+            kind=kind,
+            status=status,
+            wkt=wkt,
+        )
+    )
+
+
+def test_map_features_migration_round_trip_when_empty(migration_db: Settings) -> None:
+    settings = migration_db
+    command.upgrade(_alembic(), MAP_FEATURES)
+    assert "geom" in _columns(settings, "incident_map_features")
+
+    command.downgrade(_alembic(), ASSIGNMENTS)
+    assert _columns(settings, "incident_map_features") == set()
+    # El CHECK de eventos vuelve a no admitir los tipos del mapa.
+    (incident,) = asyncio.run(_run(settings, _INCIDENT))
+    with pytest.raises(IntegrityError):
+        asyncio.run(
+            _run(
+                settings,
+                "INSERT INTO incident_events (incident_id, event_type, payload)"
+                " VALUES (:incident, 'map_feature_added', '{}')",
+                incident=incident["id"],
+            )
+        )
+
+    command.upgrade(_alembic(), MAP_FEATURES)
+    assert "geom" in _columns(settings, "incident_map_features")
+
+
+def test_map_features_downgrade_is_refused_with_data(migration_db: Settings) -> None:
+    settings = migration_db
+    command.upgrade(_alembic(), MAP_FEATURES)
+    (incident,) = asyncio.run(_run(settings, _INCIDENT))
+    _insert_feature(settings, incident["id"], _SQUARE)
+
+    # No se pierden geometrías en silencio: el downgrade se niega y no toca nada.
+    with pytest.raises(RuntimeError, match="geometrías"):
+        command.downgrade(_alembic(), ASSIGNMENTS)
+    rows = asyncio.run(
+        _run(
+            settings,
+            "SELECT count(*) AS n, bool_and(ST_IsValid(geom)) AS valid FROM incident_map_features",
+        )
+    )
+    assert rows == [{"n": 1, "valid": True}]
+
+    # Lo mismo si solo queda el evento (historial de solo inserción).
+    asyncio.run(_run(settings, "DELETE FROM incident_map_features"))
+    asyncio.run(
+        _run(
+            settings,
+            "INSERT INTO incident_events (incident_id, event_type, payload)"
+            " VALUES (:incident, 'map_feature_retired', '{}')",
+            incident=incident["id"],
+        )
+    )
+    with pytest.raises(RuntimeError, match="eventos de geometría"):
+        command.downgrade(_alembic(), ASSIGNMENTS)
+
+
+@pytest.mark.parametrize(
+    ("wkt", "columns"),
+    [
+        pytest.param(_BOWTIE, {}, id="autointerseccion"),
+        pytest.param("LINESTRING(-5.86 43.36, -5.85 43.37)", {}, id="tipo-de-geometria"),
+        pytest.param(_SQUARE, {"status": "retired"}, id="retirado-sin-fecha"),
+        pytest.param(_SQUARE, {"kind": "unknown"}, id="tipo-desconocido"),
+        pytest.param("POINT(-5.86 43.36)", {"kind": "road_closure"}, id="corte-sin-linea"),
+    ],
+)
+def test_map_features_table_checks(
+    migration_db: Settings, wkt: str, columns: dict[str, str]
+) -> None:
+    """Defensa en profundidad: aunque se salten la API, la tabla lo impide."""
+    settings = migration_db
+    command.upgrade(_alembic(), MAP_FEATURES)
+    (incident,) = asyncio.run(_run(settings, _INCIDENT))
+    with pytest.raises(IntegrityError):
+        _insert_feature(settings, incident["id"], wkt, **columns)

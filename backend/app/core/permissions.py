@@ -32,6 +32,8 @@ class Permission(StrEnum):
     ASSIGNMENTS_MANAGE = "assignments:manage"
     # Marcar que un recurso asignado ha llegado al lugar.
     ASSIGNMENTS_UPDATE = "assignments:update"
+    # Crear, editar y retirar geometrías del mapa operativo (D-M2).
+    MAP_FEATURES_MANAGE = "map_features:manage"
 
 
 P = Permission
@@ -52,6 +54,7 @@ ROLE_PERMISSIONS: dict[RoleCode, frozenset[Permission]] = {
             P.ORGANIZATIONS_READ,
             P.ASSIGNMENTS_MANAGE,
             P.ASSIGNMENTS_UPDATE,
+            P.MAP_FEATURES_MANAGE,
         }
     ),
     # Usuario operativo (CLAUDE.md §2.11): registra incidentes, añade notas y

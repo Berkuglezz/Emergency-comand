@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next"
 import { History } from "lucide-react"
+import { createElement } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Panel, type PanelStatus } from "@/components/ops/panel"
@@ -10,7 +11,13 @@ import { RELEASE_REASON_CODES as RELEASE_REASONS } from "@/features/assignments/
 import { cn } from "@/lib/utils"
 
 import { useIncidentEvents } from "../hooks"
-import { EVENT_ICONS, incidentErrorMessage, STATUS_CODES } from "../presentation"
+import {
+  eventIcon,
+  incidentErrorMessage,
+  isKnownEventType,
+  type MapFeatureEventType,
+  STATUS_CODES,
+} from "../presentation"
 import type { IncidentEvent } from "../types"
 import { NoteForm } from "./note-form"
 
@@ -57,12 +64,16 @@ export function IncidentTimeline({ incidentId, canAddNotes, className }: Inciden
 export function TimelineEntry({ event }: { event: IncidentEvent }) {
   const { t } = useTranslation()
   const label = useCodeLabel()
-  const Icon = EVENT_ICONS[event.event_type]
   const { text, detail } = describeEvent(event, t, label)
 
   return (
     <li className="flex gap-2 border-l py-1.5 pl-3 first:pt-0 last:pb-0">
-      <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      {/* Icono resuelto en tiempo de ejecución (incluye los tipos sin representación
+          propia): `createElement` evita declarar un componente durante el render. */}
+      {createElement(eventIcon(event.event_type), {
+        "aria-hidden": true,
+        className: "mt-0.5 size-4 shrink-0 text-muted-foreground",
+      })}
       <div className="flex min-w-0 flex-col">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <time dateTime={event.occurred_at} className="font-data text-xs text-muted-foreground">
@@ -105,6 +116,43 @@ function text(value: unknown): string | null {
 }
 
 /**
+ * Elemento dibujado en el mapa: tipo, etiqueta y, según el evento, campos
+ * cambiados o motivo. La geometría del `payload` no se muestra aquí.
+ */
+function describeMapFeature(
+  type: MapFeatureEventType,
+  payload: IncidentEvent["payload"],
+  t: TFunction,
+  label: (group: CodeGroup, code: string) => string
+): { text: string; detail: string | null } {
+  const kind = text(payload.kind)
+  const name = text(payload.label)
+  const fields = (Array.isArray(payload.fields) ? payload.fields : [])
+    .filter((field): field is string => typeof field === "string")
+    .map((field) => label("mapFeatureFields", field))
+    .join(", ")
+  const reason = type === "map_feature_retired" ? text(payload.reason) : null
+  const keys = {
+    map_feature_added: "incidents.timeline.mapFeatureAdded",
+    map_feature_updated: "incidents.timeline.mapFeatureUpdated",
+    map_feature_retired: "incidents.timeline.mapFeatureRetired",
+  } as const
+  return {
+    text: t(keys[type], { kind: kind ? label("mapFeatureKinds", kind) : "—" }),
+    detail:
+      [
+        name ? t("incidents.timeline.mapFeatureLabel", { label: name }) : null,
+        type === "map_feature_updated" && fields
+          ? t("incidents.timeline.mapFeatureChanges", { fields })
+          : null,
+        reason ? t("incidents.timeline.reason", { reason }) : null,
+      ]
+        .filter(Boolean)
+        .join("\n") || null,
+  }
+}
+
+/**
  * Compone la frase traducida a partir de los códigos del `payload` (la API
  * nunca devuelve textos). Un código desconocido se muestra tal cual.
  */
@@ -114,6 +162,11 @@ function describeEvent(
   label: (group: CodeGroup, code: string) => string
 ): { text: string; detail: string | null } {
   const payload = event.payload
+  // Un tipo que esta versión del frontend aún no conoce nunca rompe la cronología.
+  const type: string = event.event_type
+  if (!isKnownEventType(type))
+    return { text: t("incidents.timeline.unknown", { type }), detail: null }
+
   const fields = (group: CodeGroup) =>
     (Array.isArray(payload.fields) ? payload.fields : [])
       .filter((field): field is string => typeof field === "string")
@@ -132,7 +185,11 @@ function describeEvent(
       : (code ?? "—")
   }
 
-  switch (event.event_type) {
+  switch (type) {
+    case "map_feature_added":
+    case "map_feature_updated":
+    case "map_feature_retired":
+      return describeMapFeature(type, payload, t, label)
     case "incident_created": {
       const parent = text(payload.parent)
       return {

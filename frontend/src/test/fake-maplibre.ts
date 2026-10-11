@@ -6,6 +6,8 @@
  *   (o `error`, o lanza al crearse, según `FakeMap.mode`).
  * - `Marker` añade su elemento dentro del contenedor del mapa: los marcadores
  *   son botones reales que los tests pueden buscar y pulsar.
+ * - Fuentes GeoJSON y capas (mapa operativo): guarda lo último que recibe cada
+ *   fuente (`setData`) y las capas añadidas, con su `paint`.
  */
 
 type LngLatTuple = [number, number]
@@ -13,6 +15,27 @@ interface MapEvent {
   lngLat?: { lng: number; lat: number }
 }
 type Handler = (event: MapEvent) => void
+
+export class GeoJSONSource {
+  /** Último GeoJSON recibido (como lo dibujaría MapLibre). */
+  data: unknown
+
+  constructor(data: unknown) {
+    this.data = data
+  }
+
+  setData(data: unknown): Promise<void> {
+    this.data = data
+    return Promise.resolve()
+  }
+}
+
+export interface FakeLayer {
+  id: string
+  type: string
+  source: string
+  paint?: Record<string, unknown>
+}
 
 export type FakeMapMode = "ok" | "basemap_error" | "unsupported"
 
@@ -28,6 +51,8 @@ export class Map {
     [-4.5, 43.7],
   ]
   removed = false
+  readonly sources = new globalThis.Map<string, GeoJSONSource>()
+  readonly layers: FakeLayer[] = []
   readonly touchZoomRotate = { disableRotation: () => undefined }
   private readonly handlers = new globalThis.Map<string, Set<Handler>>()
   private readonly canvas = document.createElement("canvas")
@@ -64,6 +89,23 @@ export class Map {
   }
 
   addControl(): this {
+    return this
+  }
+
+  addSource(id: string, source: { type: string; data: unknown }): this {
+    if (this.sources.has(id)) throw new Error(`Source "${id}" already exists.`)
+    this.sources.set(id, new GeoJSONSource(source.data))
+    return this
+  }
+
+  getSource(id: string): GeoJSONSource | undefined {
+    return this.sources.get(id)
+  }
+
+  addLayer(layer: FakeLayer): this {
+    if (this.layers.some((existing) => existing.id === layer.id))
+      throw new Error(`Layer "${layer.id}" already exists.`)
+    this.layers.push(layer)
     return this
   }
 

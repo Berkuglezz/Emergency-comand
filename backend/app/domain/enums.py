@@ -64,6 +64,10 @@ class IncidentEventType(StrEnum):
     RESOURCE_ASSIGNED = "resource_assigned"
     RESOURCE_ARRIVED = "resource_arrived"
     RESOURCE_RELEASED = "resource_released"
+    # Mapa operativo (CLAUDE.md §2.12): geometrías dibujadas sobre el incidente.
+    MAP_FEATURE_ADDED = "map_feature_added"
+    MAP_FEATURE_UPDATED = "map_feature_updated"
+    MAP_FEATURE_RETIRED = "map_feature_retired"
 
 
 # --- Recursos ---------------------------------------------------------------
@@ -93,6 +97,27 @@ class ReleaseReason(StrEnum):
     # Los dos siguientes los pone el sistema.
     REASSIGNED = "reassigned"
     INCIDENT_CLOSED = "incident_closed"
+
+
+# --- Mapa operativo -----------------------------------------------------------
+
+
+class MapFeatureKind(StrEnum):
+    """Tipo de elemento dibujado sobre el mapa de un incidente (catálogo fijo)."""
+
+    PERIMETER = "perimeter"
+    AFFECTED_AREA = "affected_area"
+    ROAD_CLOSURE = "road_closure"
+    EXCLUSION_ZONE = "exclusion_zone"
+    SAFE_ZONE = "safe_zone"
+    POINT_OF_INTEREST = "point_of_interest"
+
+
+class MapFeatureStatus(StrEnum):
+    """Activo o retirado. Retirar nunca borra la fila (D-M4)."""
+
+    ACTIVE = "active"
+    RETIRED = "retired"
 
 
 class StatusChangeCause(StrEnum):
